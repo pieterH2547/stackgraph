@@ -6,6 +6,7 @@ import { CompanyLogo } from "./CompanyLogo";
 import { StatusBadge } from "./StatusBadge";
 import { MAX_TOOLS } from "@/lib/limits";
 import type { Suggestion } from "@/lib/signals";
+import { withBasePath } from "@/lib/url";
 import type { CompanyStatus } from "@/lib/types";
 
 export interface SearchHit {
@@ -119,7 +120,9 @@ export function StackEditor({
     (async () => {
       try {
         const response = await fetch(
-          `/api/suggestions?slug=${encodeURIComponent(suggestionsFor)}&kind=${mode}`,
+          withBasePath(
+            `/api/suggestions?slug=${encodeURIComponent(suggestionsFor)}&kind=${mode}`,
+          ),
           { signal: controller.signal },
         );
         if (!response.ok) return;
@@ -143,7 +146,7 @@ export function StackEditor({
       try {
         const params = new URLSearchParams({ q: trimmed });
         if (chosenIds.length) params.set("exclude", chosenIds.join(","));
-        const response = await fetch(`/api/search?${params}`, {
+        const response = await fetch(withBasePath(`/api/search?${params}`), {
           signal: controller.signal,
         });
         const data = (await response.json()) as {

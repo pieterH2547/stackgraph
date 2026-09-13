@@ -1,7 +1,11 @@
 import type { MetadataRoute } from "next";
-import { absoluteUrl } from "@/lib/url";
+import { absoluteUrl, noIndex } from "@/lib/url";
 
 export default function robots(): MetadataRoute.Robots {
+  if (noIndex()) {
+    return { rules: { userAgent: "*", disallow: "/" } };
+  }
+
   return {
     rules: {
       userAgent: "*",

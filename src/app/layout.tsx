@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { brand } from "@/lib/brand";
-import { siteUrl } from "@/lib/url";
+import { absoluteUrl, noIndex } from "@/lib/url";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl()),
+  metadataBase: new URL(absoluteUrl("/")),
   title: {
     default: `${brand.name} — ${brand.heroHeadline}`,
     template: `%s · ${brand.name}`,
@@ -26,6 +26,8 @@ export const metadata: Metadata = {
   description: brand.heroSubline,
   openGraph: { siteName: brand.name, type: "website" },
   twitter: { card: "summary_large_image" },
+  // A test mount on a live commercial domain has no business in an index.
+  ...(noIndex() ? { robots: { index: false, follow: false } } : {}),
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

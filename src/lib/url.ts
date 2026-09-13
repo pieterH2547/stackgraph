@@ -69,6 +69,36 @@ export function nameFromDomain(domain: string): string {
     .join(" ");
 }
 
+/**
+ * The prefix the app is served under, when it isn't at a domain root — for
+ * example `/test1` while it lives behind a rewrite on someone else's domain.
+ *
+ * `<Link>` and the router prefix this automatically. Two things do not, and
+ * both matter here: `fetch()` calls to our own API routes, and the absolute
+ * URLs that go into emails, share links and metadata.
+ */
+export function basePath(): string {
+  const raw = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+  if (!raw || raw === "/") return "";
+  const withLeading = raw.startsWith("/") ? raw : `/${raw}`;
+  return withLeading.replace(/\/$/, "");
+}
+
+/** For `fetch()` from the browser to our own route handlers. */
+export function withBasePath(path: string): string {
+  return `${basePath()}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+/**
+ * True when this deployment must not be indexed at all — a staging copy, or a
+ * test mount on somebody else's domain, where the host's own robots.txt is
+ * what crawlers read and ours never gets seen.
+ */
+export function noIndex(): boolean {
+  return process.env.NEXT_PUBLIC_NOINDEX === "1";
+}
+
+/** Scheme and host only, without any base path. */
 export function siteUrl(): string {
   const fromEnv = process.env.NEXT_PUBLIC_SITE_URL;
   if (fromEnv) return fromEnv.replace(/\/$/, "");
@@ -79,6 +109,7 @@ export function siteUrl(): string {
   return "http://localhost:3000";
 }
 
+/** The URL to put in an email, a share link or a canonical tag. */
 export function absoluteUrl(path: string): string {
-  return `${siteUrl()}${path.startsWith("/") ? path : `/${path}`}`;
+  return `${siteUrl()}${withBasePath(path)}`;
 }

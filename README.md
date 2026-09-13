@@ -123,6 +123,30 @@ npm test                 # 48 tests, no network, no mail provider
 | `RESEND_API_KEY` | With no key, every notification is written to the `notifications` table and printed to the log instead of being delivered, and claim links are shown on screen so the loop stays walkable locally. |
 | `ADMIN_TOKEN` | Unlocks `/admin`. Unset means admin is unreachable. |
 | `DISABLE_SITE_DETECTION=1` | Never read vendor websites (used by the test suite). |
+| `NEXT_PUBLIC_BASE_PATH` | Serve the app under a path, e.g. `/test1`, when another site rewrites a subpath to it. Internal links, assets, API calls, share links, claim links and canonicals all pick it up. |
+| `NEXT_PUBLIC_NOINDEX=1` | Every page goes `noindex, nofollow` and robots.txt disallows everything. Use it for any staging copy, and for a test mount on a domain that isn't ours. |
+
+### Serving it under someone else's domain
+
+To reach it at `example.com/test1` without merging the two apps, deploy this
+app with `NEXT_PUBLIC_BASE_PATH=/test1` and add a rewrite on the host site
+(Next's multi-zones pattern):
+
+```ts
+// host site's next.config.ts
+async rewrites() {
+  const zone = process.env.STACKGRAPH_ORIGIN; // https://<this app>.vercel.app
+  if (!zone) return [];
+  return [
+    { source: "/test1", destination: `${zone}/test1` },
+    { source: "/test1/:path*", destination: `${zone}/test1/:path*` },
+  ];
+}
+```
+
+`assetPrefix` follows `basePath`, so `/test1/_next/*` is covered by the second
+rule. Two deployments, two databases, two sets of gates — a failure here can
+only affect that one path on the host.
 
 ---
 
