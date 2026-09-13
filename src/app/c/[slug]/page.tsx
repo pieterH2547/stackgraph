@@ -9,10 +9,10 @@ import { ShareRow } from "@/components/ShareRow";
 import { StatusBadge } from "@/components/StatusBadge";
 import { judgeRelationship, trackShare } from "@/actions/stack";
 import { brand } from "@/lib/brand";
-import { padCount, timeAgo } from "@/lib/format";
+import { companiesCount, companiesSay, padCount, timeAgo } from "@/lib/format";
 import { countIncomingOnNetwork, getCompanyBySlug } from "@/lib/db/queries";
 import { getProfile } from "@/lib/network";
-import { canEdit } from "@/lib/session";
+import { canEdit, editableAmong } from "@/lib/session";
 import { stackShareText } from "@/lib/share";
 import { reportedBySource, type RelationshipEdge } from "@/lib/types";
 import { absoluteUrl } from "@/lib/url";
@@ -53,9 +53,12 @@ export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
   if (!company) notFound();
 
   const { outgoing, incoming, usedByCount } = await getProfile(company);
-  const [mine, onNetwork] = await Promise.all([
+  const [mine, onNetwork, judgeable] = await Promise.all([
     canEdit(company.id),
     countIncomingOnNetwork(company.id),
+    // A relationship is judged by the company it is *about* — the one said to
+    // be using this product — so that is whose edit rights matter here.
+    editableAmong(incoming.map((edge) => edge.source.id)),
   ]);
 
   // Progressive unlock: an unclaimed vendor sees how many companies name them
@@ -139,7 +142,7 @@ export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
         {revealed && incoming.length > 0 && (
           <section>
             <SectionHead
-              title={`${brand.usedBy} ${usedByCount} software ${usedByCount === 1 ? "company" : "companies"}`}
+              title={`${brand.usedBy} ${companiesCount(usedByCount)}`}
               aside={<span className="mono text-ink-3">Self-reported</span>}
             />
             <div className="border-t border-line">
@@ -150,10 +153,10 @@ export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
                   type={edge.type}
                   note={incomingNote(edge, company.name)}
                   action={
-                    // Only the company a claim is *about* may judge it.
-                    !reportedBySource(edge) && mine === false ? undefined : (
-                      <JudgeIfAllowed edge={edge} />
-                    )
+                    <EdgeVerdict
+                      edge={edge}
+                      canJudge={judgeable.has(edge.source.id)}
+                    />
                   }
                 />
               ))}
@@ -232,14 +235,24 @@ function incomingNote(edge: RelationshipEdge, vendorName: string): string {
 }
 
 /**
- * The two-word reply for a relationship someone else stated about you. Rendered
- * as bound server actions so the buttons work without a client-side router.
+ * Where a relationship stands, and — for the company it is about — the
+ * two-word reply to it. Bound server actions, so the buttons need no
+ * client-side router.
  */
-function JudgeIfAllowed({ edge }: { edge: RelationshipEdge }) {
-  if (reportedBySource(edge)) return null;
+function EdgeVerdict({
+  edge,
+  canJudge,
+}: {
+  edge: RelationshipEdge;
+  canJudge: boolean;
+}) {
+  // Both ends have stated it: the strongest version of the same fact.
   if (edge.state === "CONFIRMED") {
-    return <span className="mono shrink-0 text-ink-3">Confirmed</span>;
+    return <span className="mono shrink-0 text-accent-ink">Both confirmed</span>;
   }
+  // Their own word about themselves needs no judging.
+  if (reportedBySource(edge)) return null;
+  if (!canJudge) return null;
 
   return (
     <RelationshipJudge
@@ -273,10 +286,8 @@ function UnclaimedNotice({
         {mentions > 0 ? (
           <>
             <p className="mt-2 text-xl leading-snug">
-              <span className="font-medium">
-                {mentions} software {mentions === 1 ? "company" : "companies"}
-              </span>{" "}
-              say they use {name}.
+              <span className="font-medium">{companiesSay(mentions)}</span> they
+              use {name}.
               {onNetwork > 0 && (
                 <>
                   {" "}

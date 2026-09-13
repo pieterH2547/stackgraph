@@ -55,13 +55,23 @@ function SiteHeader() {
         </Link>
 
         <nav className="flex items-center gap-3 sm:gap-5">
+          {/* The label is the first thing to go when the header gets tight. */}
           <Link
             href="/network"
-            className="mono text-ink-2 transition-colors hover:text-accent-ink"
+            className="mono hidden text-ink-2 transition-colors hover:text-accent-ink sm:inline"
           >
             The network
           </Link>
-          <Link href="/add" className="btn btn-primary !px-3.5 !py-2 !text-sm">
+          <Link
+            href="/network"
+            className="mono text-ink-2 transition-colors hover:text-accent-ink sm:hidden"
+          >
+            Network
+          </Link>
+          <Link
+            href="/add"
+            className="btn btn-primary shrink-0 !px-3.5 !py-2 !text-sm"
+          >
             {brand.ctaPrimary}
           </Link>
         </nav>

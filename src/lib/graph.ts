@@ -52,7 +52,6 @@ export async function buildGlobalGraph(limit = 70): Promise<GraphView> {
   const edges = await listRecentEdges(limit);
 
   const width = 900;
-  const height = 520;
   const degrees = new Map<string, number>();
 
   for (const edge of edges) {
@@ -72,10 +71,22 @@ export async function buildGlobalGraph(limit = 70): Promise<GraphView> {
       a.name.localeCompare(b.name),
   );
 
-  const spread = Math.min(width, height) * 0.46;
+  // A ten-node graph shouldn't sit in the middle of a canvas built for
+  // seventy, so the canvas grows with the network instead.
+  const height = Math.round(
+    Math.min(520, Math.max(260, 180 + ordered.length * 12)),
+  );
+  const xSpread = width * 0.44;
+  const ySpread = height * 0.40;
+
   const nodes: GraphNode[] = ordered.map((company, index) => {
     const angle = index * GOLDEN_ANGLE;
-    const distance = spread * Math.sqrt(index / Math.max(1, ordered.length - 1));
+    // sqrt keeps the spiral evenly dense; the +0.35 offset stops the first few
+    // nodes from piling up on the centre point.
+    const t =
+      ordered.length === 1
+        ? 0
+        : Math.sqrt((index + 0.35) / (ordered.length - 1 + 0.35));
     const degree = degrees.get(company.id) ?? 0;
 
     return {
@@ -86,8 +97,8 @@ export async function buildGlobalGraph(limit = 70): Promise<GraphView> {
       logoUrl: company.logoUrl,
       claimed: company.status === "CLAIMED",
       degree,
-      x: width / 2 + Math.cos(angle) * distance,
-      y: height / 2 + Math.sin(angle) * distance * 0.62,
+      x: width / 2 + Math.cos(angle) * t * xSpread,
+      y: height / 2 + Math.sin(angle) * t * ySpread,
       r: radius(degree),
     };
   });

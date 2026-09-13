@@ -13,7 +13,7 @@ import {
 } from "@/lib/db/queries";
 import { track } from "@/lib/events";
 import { REQUIRED_DOWNSTREAM, REQUIRED_UPSTREAM } from "@/lib/limits";
-import { padCount } from "@/lib/format";
+import { companiesSay, padCount } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -96,10 +96,8 @@ export default async function ClaimPage({
           {usedBy > 0 ? (
             <div className="mt-6 max-w-lg border-l-2 border-accent pl-5">
               <p className="text-lg leading-relaxed">
-                <span className="font-medium">
-                  {usedBy} software {usedBy === 1 ? "company" : "companies"}
-                </span>{" "}
-                say they use your product.
+                <span className="font-medium">{companiesSay(usedBy)}</span> they
+                use your product.
                 {onNetwork > 0 && (
                   <>
                     {" "}

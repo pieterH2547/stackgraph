@@ -47,7 +47,38 @@ const NOISE = [
   "github.com",
   "producthunt.com",
   "wikipedia.org",
+  "reddit.com",
+  "tiktok.com",
+  "bsky.app",
+  "threads.net",
+  "mastodon.social",
+  "medium.com",
+  "apple.com",
+  "play.google.com",
+  "t.me",
+  "whatsapp.com",
 ];
+
+/**
+ * Asset CDNs that give away the product behind them. Without this, a Framer
+ * site suggests "framerusercontent.com" instead of Framer.
+ */
+const ASSET_ALIASES: Record<string, string> = {
+  "framerusercontent.com": "framer.com",
+  "webflow.io": "webflow.com",
+  "website-files.com": "webflow.com",
+  "squarespace-cdn.com": "squarespace.com",
+  "shopifycdn.com": "shopify.com",
+  "wixstatic.com": "wix.com",
+  "hs-scripts.com": "hubspot.com",
+  "hsforms.net": "hubspot.com",
+  "hsforms.com": "hubspot.com",
+  "usemessages.com": "hubspot.com",
+  "intercomcdn.com": "intercom.com",
+  "typeform.net": "typeform.com",
+  "crisp.help": "crisp.chat",
+  "lemonsqueezy.com": "lemonsqueezy.com",
+};
 
 /** `widget.crisp.chat` -> `crisp.chat`. Good enough without a PSL. */
 function registrable(host: string): string | null {
@@ -55,12 +86,13 @@ function registrable(host: string): string | null {
   if (!clean.includes(".") || /^[\d.]+$/.test(clean)) return null;
 
   const labels = clean.split(".");
-  if (labels.length <= 2) return clean;
+  if (labels.length <= 2) return ASSET_ALIASES[clean] ?? clean;
 
   // Two-part suffixes we're likely to meet (co.uk, com.au, …).
   const suffix = labels.slice(-2).join(".");
   const twoPart = /^(co|com|org|net|gov|ac)\.[a-z]{2}$/.test(suffix);
-  return labels.slice(twoPart ? -3 : -2).join(".");
+  const domain = labels.slice(twoPart ? -3 : -2).join(".");
+  return ASSET_ALIASES[domain] ?? domain;
 }
 
 async function fetchHtml(url: string): Promise<string | null> {
@@ -108,9 +140,12 @@ function toSuggestion(
 /* -------------------------------------------------------------------------- */
 
 /**
- * Third-party hosts the page actually loads from: a form embed, an analytics
- * script, a chat widget. This is the strongest signal there is that a company
- * uses a tool, because the tool is literally running on their site.
+ * Third-party hosts the page actually *loads* from: a form embed, an analytics
+ * script, a chat widget, a stylesheet. The strongest signal there is that a
+ * company uses a tool, because the tool is literally running on their site.
+ *
+ * Deliberately not plain links — a footer full of social icons says nothing
+ * about anyone's stack.
  */
 export async function suggestPoweredBy(
   website: string,
@@ -122,12 +157,13 @@ export async function suggestPoweredBy(
   if (!html) return [];
 
   const counts = new Map<string, number>();
-  const pattern = /(?:src|href)=["'](https?:\/\/[^"'\s>]+)["']/gi;
+  const assets =
+    /<(?:script|iframe|img|source|embed)\b[^>]*\bsrc=["'](https?:\/\/[^"'\s>]+)["']|<link\b[^>]*\bhref=["'](https?:\/\/[^"'\s>]+)["']/gi;
 
-  for (const match of html.matchAll(pattern)) {
+  for (const match of html.matchAll(assets)) {
     let host: string;
     try {
-      host = new URL(match[1]).hostname;
+      host = new URL(match[1] ?? match[2]).hostname;
     } catch {
       continue;
     }
@@ -165,12 +201,16 @@ export async function suggestUsedBy(
 
   const found = new Map<string, Suggestion>();
 
-  for (const path of CUSTOMER_PAGES) {
-    if (found.size >= 6) break;
+  // In parallel: four sequential fetches would be most of a minute of the
+  // vendor's time, and cycle time is the metric this is here to protect.
+  const pages = await Promise.all(
+    CUSTOMER_PAGES.map((path) =>
+      fetchHtml(path ? new URL(path, website).toString() : website),
+    ),
+  );
 
-    const html = await fetchHtml(
-      path ? new URL(path, website).toString() : website,
-    );
+  for (const html of pages) {
+    if (found.size >= 6) break;
     if (!html) continue;
 
     for (const cue of html.matchAll(CUSTOMER_CUES)) {

@@ -32,6 +32,17 @@ export function initials(name: string): string {
   return `${words[0][0]}${words[1][0]}`.toUpperCase();
 }
 
+/** "1 software company says" / "4 software companies say". */
+export function companiesSay(count: number): string {
+  return count === 1
+    ? "1 software company says"
+    : `${count} software companies say`;
+}
+
+export function companiesCount(count: number): string {
+  return count === 1 ? "1 software company" : `${count} software companies`;
+}
+
 export function percent(value: number, digits = 0): string {
   return `${(value * 100).toFixed(digits)}%`;
 }

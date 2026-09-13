@@ -15,6 +15,9 @@ export function GlobalGraph({ graph }: { graph: GraphView }) {
   if (nodes.length === 0) return null;
 
   const newest = links.slice(0, 6).map((link) => link.id);
+  // While the graph is small, every node gets its name. Past that, only the
+  // busy ones, or the labels turn into a hedge.
+  const labelAll = nodes.length <= 24;
 
   return (
     <figure className="overflow-hidden">
@@ -79,7 +82,7 @@ export function GlobalGraph({ graph }: { graph: GraphView }) {
                   {initials(node.name)}
                 </text>
               )}
-              {node.degree >= 3 && (
+              {(labelAll || node.degree >= 3) && (
                 <text
                   x={node.x}
                   y={node.y + node.r + 13}

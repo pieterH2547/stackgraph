@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CompanyInline } from "@/components/CompanyCard";
@@ -19,7 +18,6 @@ import {
   REQUIRED_UPSTREAM,
 } from "@/lib/limits";
 import { getClaimProgress } from "@/lib/network";
-import { suggestPoweredBy, suggestUsedBy } from "@/lib/signals";
 import { canEdit } from "@/lib/session";
 import type { Company, RelationshipEdge } from "@/lib/types";
 
@@ -137,13 +135,16 @@ export default async function StackPage({
             />
           )}
 
-          <Suspense fallback={<EditorSkeleton />}>
-            <PoweredByEditor
-              company={company}
-              existingCredits={progress.upstream}
-              required={claimed ? 0 : REQUIRED_UPSTREAM}
-            />
-          </Suspense>
+          <StackEditor
+            action={saveStack.bind(null, company.slug)}
+            companyName={company.name}
+            mode="tools"
+            max={MAX_TOOLS}
+            existingCredits={progress.upstream}
+            requiredCredits={claimed ? 0 : REQUIRED_UPSTREAM}
+            suggestionsFor={company.slug}
+            submitLabel="Save what powers us"
+          />
         </section>
 
         <section>
@@ -165,67 +166,19 @@ export default async function StackPage({
             />
           )}
 
-          <Suspense fallback={<EditorSkeleton />}>
-            <UsedByEditor
-              company={company}
-              existingCredits={progress.downstream}
-              required={claimed ? 0 : REQUIRED_DOWNSTREAM}
-            />
-          </Suspense>
+          <StackEditor
+            action={saveCustomers.bind(null, company.slug)}
+            companyName={company.name}
+            mode="customers"
+            max={MAX_CUSTOMERS}
+            existingCredits={progress.downstream}
+            requiredCredits={claimed ? 0 : REQUIRED_DOWNSTREAM}
+            suggestionsFor={company.slug}
+            submitLabel="Save who we power"
+          />
         </section>
       </div>
     </main>
-  );
-}
-
-/** Suggestions need the vendor's website read, so they stream in separately. */
-async function PoweredByEditor({
-  company,
-  existingCredits,
-  required,
-}: {
-  company: Company;
-  existingCredits: number;
-  required: number;
-}) {
-  const suggestions = await suggestPoweredBy(company.website, company.domain);
-
-  return (
-    <StackEditor
-      action={saveStack.bind(null, company.slug)}
-      companyName={company.name}
-      mode="tools"
-      max={MAX_TOOLS}
-      existingCredits={existingCredits}
-      requiredCredits={required}
-      suggestions={suggestions}
-      submitLabel="Save what powers us"
-    />
-  );
-}
-
-async function UsedByEditor({
-  company,
-  existingCredits,
-  required,
-}: {
-  company: Company;
-  existingCredits: number;
-  required: number;
-}) {
-  const suggestions = await suggestUsedBy(company.website, company.domain);
-
-  return (
-    <StackEditor
-      action={saveCustomers.bind(null, company.slug)}
-      companyName={company.name}
-      mode="customers"
-      max={MAX_CUSTOMERS}
-      existingCredits={existingCredits}
-      requiredCredits={required}
-      suggestions={suggestions}
-      submitLabel="Save who we power"
-    />
   );
 }
 
@@ -264,11 +217,3 @@ function ExistingList({
   );
 }
 
-function EditorSkeleton() {
-  return (
-    <div className="mt-8">
-      <p className="label">Reading your site for suggestions…</p>
-      <div className="h-12 animate-pulse rounded-md border border-line bg-surface" />
-    </div>
-  );
-}

@@ -121,6 +121,22 @@ export async function getEditToken(companyId: string): Promise<string | null> {
   return rows[0] ? editTokenOf(rows[0]) : null;
 }
 
+/** Of these companies, the ones whose edit token the caller holds. */
+export async function getEditableCompanyIds(
+  companyIds: string[],
+  tokens: string[],
+): Promise<string[]> {
+  if (companyIds.length === 0 || tokens.length === 0) return [];
+
+  const { rows } = await getDb().execute({
+    sql: `SELECT id FROM companies
+          WHERE id IN (${companyIds.map(() => "?").join(", ")})
+            AND edit_token IN (${tokens.map(() => "?").join(", ")})`,
+    args: [...companyIds, ...tokens],
+  });
+  return rows.map((row) => str(row.id));
+}
+
 /* -------------------------------------------------------------------------- */
 /* writes                                                                     */
 /* -------------------------------------------------------------------------- */

@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { getEditToken } from "./db/queries";
+import { getEditableCompanyIds, getEditToken } from "./db/queries";
 
 const EDITOR_COOKIE = "ss_editor";
 const ADMIN_COOKIE = "ss_admin";
@@ -39,6 +39,20 @@ export async function canEdit(companyId: string): Promise<boolean> {
   const token = await getEditToken(companyId);
   if (!token) return false;
   return (await readTokens()).includes(token);
+}
+
+/**
+ * Which of these companies this browser may act for. One query, because a
+ * profile page asks about every company listed on it.
+ */
+export async function editableAmong(
+  companyIds: string[],
+): Promise<Set<string>> {
+  const tokens = await readTokens();
+  if (tokens.length === 0 || companyIds.length === 0) return new Set();
+
+  const owned = await getEditableCompanyIds(companyIds, tokens);
+  return new Set(owned);
 }
 
 /* --- admin --------------------------------------------------------------- */

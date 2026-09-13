@@ -12,6 +12,7 @@ import {
 } from "@/lib/db/queries";
 import { REQUIRED_DOWNSTREAM, REQUIRED_UPSTREAM } from "@/lib/limits";
 import { getClaimProgress } from "@/lib/network";
+import { companiesCount } from "@/lib/format";
 import { stackShareText } from "@/lib/share";
 import { absoluteUrl } from "@/lib/url";
 
@@ -52,10 +53,7 @@ export default async function DonePage({ params }: PageProps<"/done/[slug]">) {
       {claimed ? (
         <ul className="mt-8 space-y-2.5">
           <Tick>Profile claimed</Tick>
-          <Tick>
-            See all {incoming.length}{" "}
-            {incoming.length === 1 ? "company" : "companies"} using you
-          </Tick>
+          <Tick>See all {companiesCount(incoming.length)} using you</Tick>
           <Tick>Your network is now live</Tick>
         </ul>
       ) : (

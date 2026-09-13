@@ -45,10 +45,10 @@ export const brand = {
 
   stackPrompt: "Which independent tools help power your company?",
   stackPromptSupport:
-    "Name three you genuinely use. That's what a claim costs, and it's the whole form.",
+    "Two you genuinely use. Half of what a claim costs, and half of the whole form.",
   customersPrompt: "Which software companies use your product?",
   customersPromptSupport:
-    "Optional. Naming them shows up as your word until they confirm it.",
+    "Two of them. Shown as your word until they confirm it — and their confirmation is never needed for your claim.",
 
   /** The point of the whole thing, in one line, for footers and share cards. */
   footerLine: "Small software powers small software.",

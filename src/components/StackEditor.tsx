@@ -65,7 +65,7 @@ export function StackEditor({
   mode = "tools",
   existingCredits = 0,
   requiredCredits = 0,
-  suggestions = [],
+  suggestionsFor,
   max = MAX_TOOLS,
 }: {
   action: StackAction;
@@ -75,8 +75,12 @@ export function StackEditor({
   existingCredits?: number;
   /** 0 means no gate — used for the "anything missing?" editor. */
   requiredCredits?: number;
-  /** One-click prefill read from the company's own site. */
-  suggestions?: Suggestion[];
+  /**
+   * Company slug to fetch one-click prefill for. Loaded after mount on
+   * purpose: reading a vendor's website takes seconds, and the editor must be
+   * usable immediately rather than waiting for it.
+   */
+  suggestionsFor?: string;
   max?: number;
 }) {
   const [state, formAction] = useActionState<StackFormState, FormData>(action, {});
@@ -85,12 +89,16 @@ export function StackEditor({
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [typed, setTyped] = useState<TypedDomain | null>(null);
   const [searching, setSearching] = useState(false);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [active, setActive] = useState(0);
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const requiresCredits = requiredCredits > 0;
   const full = selected.length >= max;
+  // Both halves of the unlock page render an editor, so the input needs an id
+  // of its own for its label to point at the right field.
+  const inputId = `tool-search-${mode}`;
 
   const chosenIds = useMemo(
     () => selected.map((tool) => tool.existingCompanyId).filter(Boolean),
@@ -104,6 +112,27 @@ export function StackEditor({
   const credits =
     existingCredits + selected.filter((tool) => tool.countsAsCredit).length;
   const creditsShort = Math.max(0, requiredCredits - credits);
+
+  useEffect(() => {
+    if (!suggestionsFor) return;
+
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const response = await fetch(
+          `/api/suggestions?slug=${encodeURIComponent(suggestionsFor)}&kind=${mode}`,
+          { signal: controller.signal },
+        );
+        if (!response.ok) return;
+        const data = (await response.json()) as { suggestions?: Suggestion[] };
+        setSuggestions(data.suggestions ?? []);
+      } catch {
+        // No suggestions is a fine outcome; the editor works without them.
+      }
+    })();
+
+    return () => controller.abort();
+  }, [suggestionsFor, mode]);
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -215,13 +244,13 @@ export function StackEditor({
       <input type="hidden" name="tools" value={JSON.stringify(payload)} />
 
       <div className="relative">
-        <label className="label" htmlFor="tool-search">
+        <label className="label" htmlFor={inputId}>
           {mode === "tools"
             ? "Search the network, or paste a URL"
             : "Search for the company, or paste its URL"}
         </label>
         <input
-          id="tool-search"
+          id={inputId}
           ref={inputRef}
           type="text"
           autoComplete="off"
