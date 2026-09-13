@@ -1,17 +1,18 @@
 import Link from "next/link";
 import { CompanyLogo } from "./CompanyLogo";
-import { MonoCount, RecommendedMark, StatusBadge } from "./StatusBadge";
+import { MonoCount, StatusBadge } from "./StatusBadge";
 import { padCount } from "@/lib/format";
-import type { Company, RelationshipType } from "@/lib/types";
+import type { Company } from "@/lib/types";
 
 export function CompanyCard({
   company,
   usedBy,
-  type,
+  note,
 }: {
   company: Company;
   usedBy?: number;
-  type?: RelationshipType;
+  /** Short mono line under the description, e.g. "+3 this week". */
+  note?: string;
 }) {
   return (
     <Link
@@ -30,7 +31,7 @@ export function CompanyCard({
           {company.description ?? company.domain}
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-          {type === "RECOMMENDS" && <RecommendedMark />}
+          {note && <span className="mono text-accent-ink">{note}</span>}
           {usedBy !== undefined && usedBy > 0 && (
             <MonoCount label="Used by" value={padCount(usedBy)} />
           )}
@@ -50,12 +51,10 @@ export function CompanyCard({
  */
 export function CompanyInline({
   company,
-  type,
   note,
   action,
 }: {
   company: Company;
-  type?: RelationshipType;
   note?: string;
   action?: React.ReactNode;
 }) {
@@ -71,14 +70,6 @@ export function CompanyInline({
             <span className="truncate font-medium tracking-tight group-hover:text-accent-ink">
               {company.name}
             </span>
-            {type === "RECOMMENDS" && (
-              <span
-                className="mono shrink-0 text-accent-ink"
-                title="Recommended"
-              >
-                <span aria-hidden>♥</span>
-              </span>
-            )}
           </span>
           <span className="mono block truncate text-ink-3">
             {note ?? company.domain}

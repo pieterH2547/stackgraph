@@ -150,7 +150,6 @@ export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
                 <CompanyInline
                   key={edge.id}
                   company={edge.source}
-                  type={edge.type}
                   note={incomingNote(edge, company.name)}
                   action={
                     <EdgeVerdict
@@ -184,7 +183,6 @@ export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
                 <CompanyInline
                   key={edge.id}
                   company={edge.target}
-                  type={edge.type}
                   note={
                     edge.target.networkEligible
                       ? edge.target.domain

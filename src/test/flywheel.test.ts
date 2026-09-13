@@ -393,7 +393,7 @@ describe("a mentioned vendor can claim and start the next generation", () => {
     await submitStack({
       companyId: tally.id,
       tools: [
-        { website: "posthog.com", name: "PostHog", recommend: true },
+        { website: "posthog.com", name: "PostHog" },
         { website: "resend.com", name: "Resend" },
       ],
     });
@@ -497,36 +497,32 @@ describe("claim notifications dedupe", () => {
 });
 
 /* 13 --------------------------------------------------------------------- */
-describe("a recommendation is distinct from simple use", () => {
-  it("stores both kinds and updates rather than duplicating", async () => {
+describe("there is one kind of edge", () => {
+  it("records uses, and nothing that reads as an endorsement", async () => {
     const acme = await joinedCompany("acme.dev", "Acme");
     await submitStack({
       companyId: acme.id,
       tools: [
-        { website: "tally.so", name: "Tally", recommend: true },
+        { website: "tally.so", name: "Tally" },
         { website: "plausible.io", name: "Plausible" },
       ],
     });
 
     const edges = await listOutgoingEdges(acme.id);
-    expect(edges.find((e) => e.target.domain === "tally.so")?.type).toBe(
-      "RECOMMENDS",
-    );
-    expect(edges.find((e) => e.target.domain === "plausible.io")?.type).toBe(
-      "USES",
-    );
+    expect(edges).toHaveLength(2);
+    for (const edge of edges) {
+      // "Acme uses Tally" is a fact about Acme. A recommendation would be a
+      // claim about Tally, which this graph never makes on anyone's behalf.
+      expect(Object.keys(edge)).not.toContain("type");
+      expect(edge.state).toBe("SELF_REPORTED");
+    }
 
-    // Changing your mind changes the edge, it doesn't add one.
+    // Submitting the same tool again is one fact, not two.
     await submitStack({
       companyId: acme.id,
-      tools: [{ website: "plausible.io", name: "Plausible", recommend: true }],
+      tools: [{ website: "plausible.io", name: "Plausible" }],
     });
-
     expect(await countRows("relationships")).toBe(2);
-    const updated = await listOutgoingEdges(acme.id);
-    expect(updated.find((e) => e.target.domain === "plausible.io")?.type).toBe(
-      "RECOMMENDS",
-    );
   });
 });
 
@@ -671,8 +667,9 @@ describe("share links work and credit the other tools", () => {
     expect(absoluteUrl(routes.share(acme.slug))).toBe(
       "http://localhost:3000/share/acme",
     );
+    // The share text names the tools and stops. No slogan riding along.
     expect(stackShareText(acme, edges)).toBe(
-      "Acme runs on Tally, Plausible and Loops. Small software powers small software.",
+      "Acme runs on Tally, Plausible and Loops.",
     );
   });
 });

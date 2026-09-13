@@ -33,7 +33,6 @@ interface SelectedTool {
   logoUrl?: string | null;
   status?: CompanyStatus;
   countsAsCredit: boolean;
-  recommend: boolean;
 }
 
 export interface StackFormState {
@@ -55,8 +54,8 @@ function titleFromDomain(domain: string): string {
  * pick, done. A tool that isn't in the network yet is added from the same
  * input — the person crediting it never fills in someone else's profile.
  *
- * In "tools" mode the counter is the point: three independent vendors is what
- * a claim costs, and incumbents visibly don't count towards it.
+ * The counter is the point: each half of a claim costs two, and incumbents
+ * visibly don't count towards it.
  */
 export function StackEditor({
   action,
@@ -189,11 +188,11 @@ export function StackEditor({
       ]
     : [];
 
-  function add(tool: Omit<SelectedTool, "key" | "recommend">) {
+  function add(tool: Omit<SelectedTool, "key">) {
     if (full || chosenDomains.has(tool.domain)) return;
     setSelected((current) => [
       ...current,
-      { ...tool, key: `${tool.domain}-${current.length}`, recommend: false },
+      { ...tool, key: `${tool.domain}-${current.length}` },
     ]);
     setQuery("");
     setHits([]);
@@ -228,7 +227,6 @@ export function StackEditor({
     existingCompanyId: tool.existingCompanyId,
     name: tool.name,
     website: tool.website,
-    recommend: tool.recommend,
   }));
 
   const blocked =
@@ -416,44 +414,6 @@ export function StackEditor({
                 </span>
               </span>
 
-              {mode === "tools" && (
-                <span className="flex overflow-hidden rounded-md border border-line-strong">
-                  <button
-                    type="button"
-                    aria-pressed={!tool.recommend}
-                    onClick={() =>
-                      setSelected((current) =>
-                        current.map((item, i) =>
-                          i === index ? { ...item, recommend: false } : item,
-                        ),
-                      )
-                    }
-                    className={`mono px-2.5 py-1.5 ${
-                      tool.recommend ? "text-ink-3" : "bg-ink text-paper"
-                    }`}
-                  >
-                    Just using it
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={tool.recommend}
-                    onClick={() =>
-                      setSelected((current) =>
-                        current.map((item, i) =>
-                          i === index ? { ...item, recommend: true } : item,
-                        ),
-                      )
-                    }
-                    className={`mono border-l border-line-strong px-2.5 py-1.5 ${
-                      tool.recommend
-                        ? "bg-accent text-white"
-                        : "text-ink-3 hover:text-accent-ink"
-                    }`}
-                  >
-                    <span aria-hidden>♥ </span>Recommend
-                  </button>
-                </span>
-              )}
 
               <button
                 type="button"

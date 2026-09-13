@@ -1,4 +1,5 @@
 /** Ad-hoc read-only dump of the local graph. Handy while developing. */
+import "./load-env";
 import { getDb } from "../src/lib/db/client";
 
 async function main() {

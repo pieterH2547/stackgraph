@@ -13,13 +13,14 @@
  * Production seeding is a different job: real companies, added in /admin, who
  * then go through the same claim flow as everyone else.
  */
+import "./load-env";
 import { ensureSchema, getDb } from "../src/lib/db/client";
 import { getCompanyByDomain, updateCompany } from "../src/lib/db/queries";
 import { addCompany, submitCustomers, submitStack } from "../src/lib/network";
 import { nowIso } from "../src/lib/ids";
 import type { Company } from "../src/lib/types";
 
-const url = process.env.DATABASE_URL ?? "file:./.data/smallstack.db";
+const url = process.env.DATABASE_URL ?? "file:./.data/stackgraph.db";
 const isLocalFile = url.startsWith("file:");
 
 /** The email step of a claim. The three edges still have to be earned. */
@@ -75,7 +76,7 @@ async function main() {
   await submitStack({
     companyId: acme.id,
     tools: [
-      { name: "Tally", website: "https://tally.so", recommend: true },
+      { name: "Tally", website: "https://tally.so" },
       { name: "Plausible", website: "https://plausible.io" },
       { name: "Stripe", website: "https://stripe.com" },
     ],
@@ -93,7 +94,7 @@ async function main() {
   await submitStack({
     companyId: tally.id,
     tools: [
-      { name: "PostHog", website: "https://posthog.com", recommend: true },
+      { name: "PostHog", website: "https://posthog.com" },
       { name: "Resend", website: "https://resend.com" },
     ],
   });

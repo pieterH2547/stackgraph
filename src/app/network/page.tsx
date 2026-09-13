@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "The network",
-  description: brand.subline,
+  description: brand.heroSubline,
   alternates: { canonical: "/network" },
 };
 

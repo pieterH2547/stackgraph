@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { brand } from "@/lib/brand";
 import {
   claimDomainMatches,
   claimExpired,
@@ -74,7 +75,7 @@ export async function startClaim(
   const link = absoluteUrl(routes.claimVerify(company.slug, claim.token));
   await sendEmail({
     to: email,
-    subject: `Claim ${company.name} on Smallstack`,
+    subject: `Claim ${company.name} on ${brand.name}`,
     text: [
       `Hi ${name},`,
       "",
@@ -83,7 +84,7 @@ export async function startClaim(
       "",
       "The link works for 72 hours.",
       "",
-      "— Smallstack",
+      `— ${brand.name}`,
     ].join("\n"),
   });
 
@@ -95,8 +96,8 @@ export async function startClaim(
 
 /**
  * Verifying the email establishes identity. It does not finish the claim: a
- * profile turns CLAIMED once three independent tools have been credited, which
- * is exactly what this redirect goes off to collect.
+ * profile turns CLAIMED once both sides of the company are shown, which is
+ * exactly what this redirect goes off to collect.
  */
 export async function completeClaim(token: string): Promise<void> {
   const claim = await getClaimByToken(token);

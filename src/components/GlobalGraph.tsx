@@ -29,7 +29,7 @@ export function GlobalGraph({ graph }: { graph: GraphView }) {
           role="img"
           aria-label="The independent software graph"
         >
-          <g fill="none">
+          <g fill="none" stroke="var(--color-line-strong)">
             {links.map((link) => {
               const fresh = newest.includes(link.id);
               return (
@@ -38,12 +38,8 @@ export function GlobalGraph({ graph }: { graph: GraphView }) {
                   d={`M ${link.from.x} ${link.from.y} Q ${
                     (link.from.x + link.to.x) / 2
                   } ${(link.from.y + link.to.y) / 2 - 24} ${link.to.x} ${link.to.y}`}
-                  stroke={
-                    link.recommends
-                      ? "var(--color-accent)"
-                      : "var(--color-line-strong)"
-                  }
-                  strokeWidth={link.recommends ? 1.4 : 1}
+                  strokeWidth={fresh ? 1.4 : 1}
+                  stroke={fresh ? "var(--color-accent)" : undefined}
                   opacity={fresh ? 0.95 : 0.55}
                   className={fresh ? "graph-draw" : undefined}
                 />
@@ -118,7 +114,7 @@ export function GlobalGraph({ graph }: { graph: GraphView }) {
         </span>
         <span className="flex items-center gap-1.5">
           <span aria-hidden className="inline-block h-px w-5 bg-accent" />
-          Recommends
+          Just connected
         </span>
         <span>Bigger node, more connections</span>
       </figcaption>

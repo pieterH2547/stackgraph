@@ -48,24 +48,14 @@ export function LocalGraph({
               <path
                 key={`u-${side.company.id}`}
                 d={curve(side.x, side.y, centre.x, centre.y)}
-                strokeWidth={side.recommends ? 1.8 : 1}
-                stroke={
-                  side.recommends
-                    ? "var(--color-accent)"
-                    : "var(--color-line-strong)"
-                }
+                strokeWidth={1}
               />
             ))}
             {graph.tools.map((side) => (
               <path
                 key={`t-${side.company.id}`}
                 d={curve(centre.x, centre.y, side.x, side.y)}
-                strokeWidth={side.recommends ? 1.8 : 1}
-                stroke={
-                  side.recommends
-                    ? "var(--color-accent)"
-                    : "var(--color-line-strong)"
-                }
+                strokeWidth={1}
               />
             ))}
           </g>

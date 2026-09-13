@@ -30,10 +30,3 @@ export function MonoCount({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function RecommendedMark() {
-  return (
-    <span className="mono inline-flex items-center gap-1 text-accent-ink">
-      <span aria-hidden>♥</span> Recommended
-    </span>
-  );
-}

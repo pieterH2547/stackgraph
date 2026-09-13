@@ -38,7 +38,7 @@ export default async function Image({
             fontSize: 56,
           }}
         >
-          {brand.tagline}
+          {brand.heroHeadline}
         </div>
       ),
       size,
@@ -132,7 +132,7 @@ export default async function Image({
           }}
         >
           <span style={{ letterSpacing: 6 }}>{brand.wordmark}</span>
-          <span>{brand.footerLine}</span>
+          <span>{brand.category}</span>
         </div>
       </div>
     ),

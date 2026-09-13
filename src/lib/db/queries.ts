@@ -12,7 +12,6 @@ import type {
   Relationship,
   RelationshipEdge,
   RelationshipState,
-  RelationshipType,
 } from "../types";
 
 /* -------------------------------------------------------------------------- */
@@ -313,8 +312,8 @@ export async function touchCompanies(ids: string[]): Promise<void> {
 
 /**
  * Identity established, claim not yet complete. Under the current thesis a
- * profile only turns CLAIMED once three independent tools have been credited,
- * so verifying an email is a step, not the finish line.
+ * profile only turns CLAIMED once both sides of the company are shown, so
+ * verifying an email is a step, not the finish line.
  */
 export async function recordClaimIdentity(
   id: string,
@@ -338,19 +337,17 @@ export async function markCompanyClaimed(id: string): Promise<Company | null> {
 
 export type RelationshipWriteOutcome =
   | "CREATED"
-  | "TYPE_UPDATED"
   | "DUPLICATE"
   | "SELF_REFERENCE";
 
 /**
- * Relationships are unique per (source, target) pair. Saying "we use X" twice
- * is not two facts, and switching a tool from USES to RECOMMENDS updates the
- * existing edge rather than adding a second one.
+ * Relationships are unique per (source, target) pair: saying "we use X" twice
+ * is not two facts. There is only one kind of edge — "source uses target" —
+ * so a repeat is simply a duplicate.
  */
 export async function upsertRelationship(input: {
   sourceCompanyId: string;
   targetCompanyId: string;
-  type: RelationshipType;
   reportedByCompanyId: string;
   edgeKind: EdgeKind;
 }): Promise<{
@@ -363,7 +360,7 @@ export async function upsertRelationship(input: {
 
   const db = getDb();
   const existing = await db.execute({
-    sql: `SELECT id, source_company_id, target_company_id, type,
+    sql: `SELECT id, source_company_id, target_company_id,
                  reported_by_company_id, state, edge_kind, created_at
           FROM relationships
           WHERE source_company_id = ? AND target_company_id = ? LIMIT 1`,
@@ -372,20 +369,12 @@ export async function upsertRelationship(input: {
 
   if (existing.rows[0]) {
     const row = existing.rows[0];
-    const current = str(row.type) as RelationshipType;
-    if (current !== input.type) {
-      await db.execute({
-        sql: `UPDATE relationships SET type = ? WHERE id = ?`,
-        args: [input.type, str(row.id)],
-      });
-    }
     return {
-      outcome: current === input.type ? "DUPLICATE" : "TYPE_UPDATED",
+      outcome: "DUPLICATE",
       relationship: {
         id: str(row.id),
         sourceCompanyId: str(row.source_company_id),
         targetCompanyId: str(row.target_company_id),
-        type: input.type,
         reportedByCompanyId: optStr(row.reported_by_company_id),
         state: str(row.state) as RelationshipState,
         edgeKind: str(row.edge_kind) as EdgeKind,
@@ -398,14 +387,13 @@ export async function upsertRelationship(input: {
   const createdAt = nowIso();
   await db.execute({
     sql: `INSERT INTO relationships
-            (id, source_company_id, target_company_id, type,
+            (id, source_company_id, target_company_id,
              reported_by_company_id, state, edge_kind, created_at)
-          VALUES (?, ?, ?, ?, ?, 'SELF_REPORTED', ?, ?)`,
+          VALUES (?, ?, ?, ?, 'SELF_REPORTED', ?, ?)`,
     args: [
       id,
       input.sourceCompanyId,
       input.targetCompanyId,
-      input.type,
       input.reportedByCompanyId,
       input.edgeKind,
       createdAt,
@@ -418,7 +406,6 @@ export async function upsertRelationship(input: {
       id,
       sourceCompanyId: input.sourceCompanyId,
       targetCompanyId: input.targetCompanyId,
-      type: input.type,
       reportedByCompanyId: input.reportedByCompanyId,
       state: "SELF_REPORTED",
       edgeKind: input.edgeKind,
@@ -514,7 +501,7 @@ export async function getEdgeById(
 
 const EDGE_SELECT = `
   SELECT
-    r.id AS r_id, r.type AS r_type, r.created_at AS r_created_at,
+    r.id AS r_id, r.created_at AS r_created_at,
     r.reported_by_company_id AS r_reported_by, r.state AS r_state,
     r.edge_kind AS r_edge_kind,
     ${(["s", "t"] as const)
@@ -540,7 +527,6 @@ function prefixedRow(row: Row, prefix: "s" | "t"): Row {
 function mapEdge(row: Row): RelationshipEdge {
   return {
     id: str(row.r_id),
-    type: str(row.r_type) as RelationshipType,
     reportedByCompanyId: optStr(row.r_reported_by),
     state: str(row.r_state) as RelationshipState,
     edgeKind: str(row.r_edge_kind) as EdgeKind,
@@ -605,31 +591,46 @@ export async function listRecentlyClaimed(limit = 6): Promise<Company[]> {
   return rows.map(mapCompany);
 }
 
-export interface UsedTool {
+export interface GrowingNetwork {
   company: Company;
-  usedBy: number;
-  recommendedBy: number;
+  /** Connections gained inside the window, either direction. */
+  gained: number;
+  total: number;
 }
 
-/** Most-used independent tools. Incumbents are excluded on purpose: this list
- * is about making small software visible, and Stripe would win it forever. */
-export async function listMostUsedEligible(limit = 8): Promise<UsedTool[]> {
+/**
+ * Companies whose network grew lately, in either direction.
+ *
+ * Deliberately not a "most used" table: a leaderboard of totals is a
+ * popularity contest with extra steps, and the same handful of names would
+ * sit on top of it forever. This is movement, not merit.
+ */
+export async function listGrowingNetworks(
+  options: { days?: number; limit?: number } = {},
+): Promise<GrowingNetwork[]> {
+  const days = options.days ?? 7;
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
   const { rows } = await getDb().execute({
     sql: `SELECT ${prefixedColumns("c")},
-            COUNT(r.id) AS used_by,
-            SUM(CASE WHEN r.type = 'RECOMMENDS' THEN 1 ELSE 0 END) AS recommended_by
+            SUM(CASE WHEN r.created_at >= ? THEN 1 ELSE 0 END) AS gained,
+            COUNT(r.id) AS total
           FROM companies c
-          JOIN relationships r ON r.target_company_id = c.id AND r.state != 'DISPUTED'
+          JOIN relationships r
+            ON (r.source_company_id = c.id OR r.target_company_id = c.id)
+           AND r.state != 'DISPUTED'
           WHERE c.network_eligible = 1
           GROUP BY c.id
-          ORDER BY used_by DESC, c.name ASC
+          HAVING gained > 0
+          ORDER BY gained DESC, c.updated_at DESC
           LIMIT ?`,
-    args: [limit],
+    args: [since, options.limit ?? 6],
   });
+
   return rows.map((row) => ({
     company: mapCompany(row),
-    usedBy: Number(row.used_by ?? 0),
-    recommendedBy: Number(row.recommended_by ?? 0),
+    gained: Number(row.gained ?? 0),
+    total: Number(row.total ?? 0),
   }));
 }
 

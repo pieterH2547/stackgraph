@@ -1,3 +1,4 @@
+import { brand } from "./brand";
 import { getDb } from "./db/client";
 import { countIncoming, getCompanyById } from "./db/queries";
 import { newId, nowIso } from "./ids";
@@ -57,7 +58,7 @@ export function composeMentionEmail(input: {
         "",
         `See who uses you: ${claimUrl}`,
         "",
-        "— Smallstack. Small software powers small software.",
+        `— ${brand.name}, ${brand.category}.`,
       ].join("\n"),
     };
   }
@@ -77,11 +78,11 @@ export function composeMentionEmail(input: {
     body: [
       opening,
       "",
-      "Your profile is already waiting for you. Claim it to see who uses your product, and to credit the three independent tools powering yours.",
+      "Your profile is already waiting for you. Claim it to see who uses your product, and to credit the independent tools powering yours.",
       "",
       `See who uses you: ${claimUrl}`,
       "",
-      "— Smallstack. Small software powers small software.",
+      `— ${brand.name}, ${brand.category}.`,
     ].join("\n"),
   };
 }

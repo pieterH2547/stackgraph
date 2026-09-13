@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS companies (
   claim_name         TEXT,
   claim_role         TEXT,
   -- Identity established (email verified, or added by its own founder). The
-  -- claim only completes once three independent tools have been credited.
+  -- claim only completes once both sides of the company have been shown.
   claim_verified_at  TEXT,
   claimed_at         TEXT,
   edit_token         TEXT NOT NULL,
@@ -52,7 +52,9 @@ CREATE TABLE IF NOT EXISTS relationships (
   id                     TEXT PRIMARY KEY,
   source_company_id      TEXT NOT NULL REFERENCES companies (id) ON DELETE CASCADE,
   target_company_id      TEXT NOT NULL REFERENCES companies (id) ON DELETE CASCADE,
-  type                   TEXT NOT NULL DEFAULT 'USES',
+  -- There is one kind of edge: "source uses target". A recommendation is a
+  -- different claim entirely — an endorsement — and this graph doesn't make
+  -- endorsements on anyone's behalf.
   -- The company that stated it: normally the source, or the target when a
   -- vendor names its own customers.
   reported_by_company_id TEXT REFERENCES companies (id) ON DELETE SET NULL,

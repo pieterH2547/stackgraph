@@ -45,7 +45,6 @@ function parseEntries(raw: unknown, max: number): StackToolInput[] {
           : undefined,
       name: typeof tool.name === "string" ? tool.name : undefined,
       website: typeof tool.website === "string" ? tool.website : undefined,
-      recommend: tool.recommend === true,
     };
   });
 }

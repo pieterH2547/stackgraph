@@ -24,12 +24,7 @@ import {
 } from "./limits";
 import { notifyMention } from "./notify";
 import { normalizeSiteUrl } from "./url";
-import type {
-  Company,
-  CompanySource,
-  EdgeKind,
-  RelationshipType,
-} from "./types";
+import type { Company, CompanySource, EdgeKind } from "./types";
 
 export {
   MAX_CUSTOMERS,
@@ -144,13 +139,10 @@ export interface StackToolInput {
   /** Typed by hand: a tool that isn't in the network yet. */
   name?: string;
   website?: string;
-  /** "Would you recommend it?" — yes, or just using it. */
-  recommend?: boolean;
 }
 
 export interface StackConnection {
   company: Company;
-  type: RelationshipType;
   /** An unclaimed profile was created automatically for this tool. */
   createdProfile: boolean;
   createdRelationship: boolean;
@@ -250,12 +242,10 @@ export async function submitStack(
     if (seen.has(target.id)) continue;
     seen.add(target.id);
 
-    const type: RelationshipType = tool.recommend ? "RECOMMENDS" : "USES";
     const edgeKind = classifyEdge(target);
     const { outcome } = await upsertRelationship({
       sourceCompanyId: company.id,
       targetCompanyId: target.id,
-      type,
       reportedByCompanyId: company.id,
       edgeKind,
     });
@@ -267,7 +257,7 @@ export async function submitStack(
       await track("relationship_created", {
         companyId: company.id,
         targetCompanyId: target.id,
-        props: { type, edgeKind, direction: "POWERED_BY" },
+        props: { edgeKind, direction: "POWERED_BY" },
       });
       await track("vendor_mentioned", {
         companyId: target.id,
@@ -291,7 +281,6 @@ export async function submitStack(
 
     connections.push({
       company: target,
-      type,
       createdProfile,
       createdRelationship,
       edgeKind,
@@ -470,7 +459,6 @@ export async function submitCustomers(
       // The customer is the one doing the using, whoever said so.
       sourceCompanyId: customer.id,
       targetCompanyId: company.id,
-      type: "USES",
       reportedByCompanyId: company.id,
       edgeKind,
     });
@@ -494,7 +482,7 @@ export async function submitCustomers(
       await track("relationship_created", {
         companyId: customer.id,
         targetCompanyId: company.id,
-        props: { type: "USES", edgeKind, direction: "USED_BY" },
+        props: { edgeKind, direction: "USED_BY" },
       });
 
       const customerId = customer.id;
@@ -511,7 +499,6 @@ export async function submitCustomers(
 
     connections.push({
       company: customer,
-      type: "USES",
       createdProfile,
       createdRelationship,
       edgeKind,

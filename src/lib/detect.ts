@@ -208,7 +208,7 @@ export async function findPublishedContactEmail(
         redirect: "follow",
         signal: AbortSignal.timeout(TIMEOUT_MS),
         headers: {
-          "user-agent": "SmallstackBot/0.1 (+https://smallstack.dev)",
+          "user-agent": "StackgraphBot/0.1 (+https://stackgraph.dev)",
           accept: "text/html",
         },
       });
@@ -252,7 +252,7 @@ export async function detectSite(input: string): Promise<DetectedSite> {
       signal: AbortSignal.timeout(TIMEOUT_MS),
       headers: {
         // Identify ourselves honestly; we are reading a public page.
-        "user-agent": "SmallstackBot/0.1 (+https://smallstack.dev)",
+        "user-agent": "StackgraphBot/0.1 (+https://stackgraph.dev)",
         accept: "text/html,application/xhtml+xml",
       },
     });

@@ -81,9 +81,9 @@ export default async function StackPage({
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-14 sm:px-8 sm:py-20">
-      {justVerified && (
-        <p className="mono text-accent-ink">Email confirmed</p>
-      )}
+      <p className="mono text-ink-3">
+        {justVerified ? "Email confirmed · last step" : "Step 3 of 3"}
+      </p>
 
       <div className="mt-3 flex items-start gap-4">
         <CompanyLogo name={company.name} logoUrl={company.logoUrl} size="lg" />
@@ -209,7 +209,6 @@ function ExistingList({
           <CompanyInline
             key={edge.id}
             company={pick(edge)}
-            type={edge.type}
           />
         ))}
       </div>

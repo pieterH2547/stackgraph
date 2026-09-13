@@ -1,16 +1,19 @@
-# Smallstack
+# Stackgraph
 
-**Small software powers small software.**
-See what powers small software — and who it powers.
+**Find out who uses your software.**
 
-A network of small independent software companies where every company shows
-two things:
+The independent software graph. Every company shows two things:
 
 - **Powered by** — which independent tools it uses
 - **Used by** — which software companies use it
 
 Not a directory. Not a launch site. Not a marketplace. The relationships are
 the product; the profiles are almost incidental.
+
+"Independent software" is the *category*, never the brand: naming a product
+after smallness tells people they're smaller than they think they are.
+"Small software powers small software" is a manifesto line, and it lives in
+the manifesto — the hero has to be a reason to claim, not a belief.
 
 ---
 
@@ -51,6 +54,12 @@ Large incumbents (Stripe, Vercel, OpenAI, Slack…) may sit in a stack but never
 count towards the two and never trigger the loop:
 
 > Big tools may appear in the graph. Small tools are the graph.
+
+### One kind of edge
+
+`source uses target`, and nothing else. A recommendation is a different claim
+— an endorsement of somebody else's product — and this graph never makes one
+on anyone's behalf. No stars, no ratings, no rankings, no "top" anything.
 
 ### Every edge does one of two jobs
 
@@ -93,6 +102,10 @@ npm run db:inspect       # dump the local graph
 npm run db:reset         # empty every table
 ```
 
+Every script reads `.env` first (`scripts/load-env.ts`). Without that, a
+`DATABASE_URL` pointing at Turso would be ignored and `db:push` would quietly
+build a schema in a local file instead.
+
 ### Gates
 
 ```bash
@@ -117,8 +130,8 @@ npm test                 # 48 tests, no network, no mail provider
 
 | Route | What happens |
 | --- | --- |
-| `/` | Hero, the global graph, recently connected, the manifesto |
-| `/add` | One field: your website |
+| `/` | Hero, the global graph, recently connected, the manifesto, growing networks |
+| `/add` | One field: your website. Called *Claim your company*, because half the companies people look for already have a profile waiting — paste a domain that exists and you land on its claim page. |
 | `/add/confirm` | "We found this" — name, one line, for whom, built by, category |
 | `/stack/[slug]` | **The unlock page.** Both halves, with one-click suggestions read from your own site |
 | `/done/[slug]` | ✓ Profile claimed · ✓ See who uses you · ✓ Your network is live |
@@ -170,6 +183,11 @@ next to K, because K without cycle time says nothing.
 
 Profile count is deliberately not a headline. A node without edges is worth
 almost nothing.
+
+The public surfaces follow the same rule: the homepage shows **recently
+connected** and **growing networks** (last 7 days, with the change, not the
+total). A "most used" table is a popularity contest with extra steps, and the
+same handful of names would sit on top of it forever.
 
 ---
 

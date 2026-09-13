@@ -8,8 +8,8 @@ export const dynamic = "force-dynamic";
 /**
  * Typeahead for the stack editor. Kept tiny: this has to feel instant.
  *
- * It also answers whether a typed domain counts towards the three independent
- * tools a claim costs, because the incumbent list lives on the server.
+ * It also answers whether a typed domain counts towards the independent tools
+ * a claim costs, because the incumbent list lives on the server.
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);

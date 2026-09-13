@@ -25,7 +25,7 @@ export default async function ConfirmPage({
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-14 sm:px-8 sm:py-20">
-      <p className="mono text-ink-3">Step 1 of 2</p>
+      <p className="mono text-ink-3">Step 2 of 3</p>
       <h1 className="mt-3 max-w-2xl text-[clamp(2rem,5vw,3.25rem)] font-medium leading-[1.02] tracking-[-0.035em]">
         We found this.
       </h1>

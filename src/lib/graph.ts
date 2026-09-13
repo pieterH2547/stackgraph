@@ -24,7 +24,6 @@ export interface GraphLink {
   id: string;
   from: { x: number; y: number };
   to: { x: number; y: number };
-  recommends: boolean;
   /** Index in recency order; the newest links draw themselves in. */
   rank: number;
 }
@@ -114,7 +113,6 @@ export async function buildGlobalGraph(limit = 70): Promise<GraphView> {
       id: edge.id,
       from: { x: from.x, y: from.y },
       to: { x: to.x, y: to.y },
-      recommends: edge.type === "RECOMMENDS",
       rank,
     });
   });
@@ -124,7 +122,6 @@ export async function buildGlobalGraph(limit = 70): Promise<GraphView> {
 
 export interface LocalGraphSide {
   company: Company;
-  recommends: boolean;
   x: number;
   y: number;
 }
@@ -167,7 +164,6 @@ export function buildLocalGraph(
     const step = height / (shown.length + 1);
     return shown.map((edge, index) => ({
       company: pick(edge),
-      recommends: edge.type === "RECOMMENDS",
       x,
       y: step * (index + 1),
     }));

@@ -77,7 +77,6 @@ export default async function AdminCompanyPage({
               <CompanyInline
                 key={edge.id}
                 company={edge.target}
-                type={edge.type}
               />
             ))}
           </div>
@@ -93,7 +92,6 @@ export default async function AdminCompanyPage({
               <CompanyInline
                 key={edge.id}
                 company={edge.source}
-                type={edge.type}
               />
             ))}
           </div>

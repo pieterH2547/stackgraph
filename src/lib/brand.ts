@@ -3,20 +3,34 @@
  * product renamed) in one place instead of thirty.
  *
  * Voice: independent, dry, anti-bloat. Plain language with a point of view.
- * Never: "accelerate growth", "unlock synergies", "all-in-one ecosystem",
- * "you have been listed in our directory".
+ *
+ * Two rules learned the hard way:
+ *
+ * 1. "Independent software" is the *category*, never the brand. Naming the
+ *    product after smallness tells people they are smaller than they think
+ *    they are.
+ * 2. The hero answers "what do I get", not "what do we believe". The belief
+ *    belongs in the manifesto; the hero has to be a reason to claim.
  */
 export const brand = {
-  name: "Smallstack",
-  wordmark: "SMALLSTACK",
-  domain: "smallstack.dev",
+  name: "Stackgraph",
+  wordmark: "STACKGRAPH",
+  domain: "stackgraph.dev",
 
-  tagline: "Small software powers small software.",
-  subline: "See what powers small software — and who it powers.",
+  /** The category this sits in. Not a slogan, not a name. */
+  category: "the independent software graph",
+
+  /* --- hero: what's in it for the visitor ------------------------------- */
+  heroHeadline: "Find out who uses your software.",
+  heroSubline:
+    "Stackgraph maps which independent software companies run on which. Claim your company to see who uses your product — and to credit the tools that power you.",
   /** Dry qualifier under the hero CTA. */
   heroAside: "No rankings. No sales deck. Just who uses what.",
 
-  ctaPrimary: "Add your company",
+  /* --- calls to action -------------------------------------------------- */
+  // "Add" was the wrong verb: adding a profile claims nothing, and half the
+  // companies people look for already have one waiting.
+  ctaPrimary: "Claim your company",
   ctaClaim: "Claim your profile",
   ctaSeeWhoUsesYou: "See who uses you",
 
@@ -24,6 +38,11 @@ export const brand = {
   poweredBy: "Powered by",
   usedBy: "Used by",
 
+  /* --- the graph -------------------------------------------------------- */
+  graphHeading: "The independent software graph",
+  graphSubline: "Watch it connect itself.",
+
+  /* --- manifesto: where the belief lives ------------------------------- */
   manifesto: {
     heading: "We're not building another G2.",
     lines: [
@@ -34,15 +53,14 @@ export const brand = {
       "No popularity contest.",
     ],
     closer: "We don't write your story. You show your network.",
+    /** A manifesto line, deliberately not a headline. */
+    signature: "Small software powers small software.",
   },
-
-  /** The graph section, on the homepage. */
-  graphHeading: "The independent software graph",
-  graphSubline: "Watch small software connect itself.",
 
   noQuestionnaire:
     "No 47-field vendor questionnaire. No analyst essay. Just what you build, what powers you, and who you power.",
 
+  /* --- the claim ------------------------------------------------------- */
   stackPrompt: "Which independent tools help power your company?",
   stackPromptSupport:
     "Two you genuinely use. Half of what a claim costs, and half of the whole form.",
@@ -50,10 +68,9 @@ export const brand = {
   customersPromptSupport:
     "Two of them. Shown as your word until they confirm it — and their confirmation is never needed for your claim.",
 
-  /** The point of the whole thing, in one line, for footers and share cards. */
-  footerLine: "Small software powers small software.",
+  footerLine: "The independent software graph.",
   footerAside:
-    "The enemy was never enterprise software. It's a discovery model that makes small useful products invisible.",
+    "The enemy was never enterprise software. It's a discovery model that makes independent products invisible.",
 } as const;
 
 export const CATEGORIES = [

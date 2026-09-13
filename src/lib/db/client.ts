@@ -11,12 +11,12 @@ import { SCHEMA_SQL, TABLES } from "./schema";
  * for anything you want to keep.
  */
 const DEFAULT_URL = process.env.VERCEL
-  ? "file:/tmp/smallstack.db"
-  : "file:./.data/smallstack.db";
+  ? "file:/tmp/stackgraph.db"
+  : "file:./.data/stackgraph.db";
 
 type GlobalWithDb = typeof globalThis & {
-  __smallstackDb?: Client;
-  __smallstackSchema?: Promise<void>;
+  __stackgraphDb?: Client;
+  __stackgraphSchema?: Promise<void>;
 };
 
 const g = globalThis as GlobalWithDb;
@@ -51,20 +51,20 @@ function connect(): Client {
  * this is safe against a database that is already up to date.
  */
 export function getDb(): Client {
-  if (!g.__smallstackDb) {
-    g.__smallstackDb = connect();
-    g.__smallstackSchema = undefined;
+  if (!g.__stackgraphDb) {
+    g.__stackgraphDb = connect();
+    g.__stackgraphSchema = undefined;
   }
-  if (!g.__smallstackSchema) {
-    g.__smallstackSchema = g.__smallstackDb.executeMultiple(SCHEMA_SQL);
+  if (!g.__stackgraphSchema) {
+    g.__stackgraphSchema = g.__stackgraphDb.executeMultiple(SCHEMA_SQL);
   }
-  return g.__smallstackDb;
+  return g.__stackgraphDb;
 }
 
 /** Awaits the lazy schema application. Call before the first query in a script. */
 export async function ensureSchema(): Promise<void> {
   getDb();
-  await g.__smallstackSchema;
+  await g.__stackgraphSchema;
 }
 
 /** Test/dev helper: empties every table without dropping the schema. */
@@ -78,6 +78,6 @@ export async function truncateAll(): Promise<void> {
 
 /** Test helper: forces the next getDb() to reconnect (e.g. after changing env). */
 export function resetDbConnection(): void {
-  g.__smallstackDb = undefined;
-  g.__smallstackSchema = undefined;
+  g.__stackgraphDb = undefined;
+  g.__stackgraphSchema = undefined;
 }

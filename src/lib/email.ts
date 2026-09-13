@@ -27,7 +27,7 @@ export async function sendEmail(email: OutboundEmail): Promise<SendResult> {
 
   if (!apiKey) {
     console.info(
-      `[smallstack] email not sent (no RESEND_API_KEY). to=${email.to} subject="${email.subject}"\n${email.text}`,
+      `[stackgraph] email not sent (no RESEND_API_KEY). to=${email.to} subject="${email.subject}"\n${email.text}`,
     );
     return { delivered: false, transport: "outbox" };
   }
@@ -40,7 +40,7 @@ export async function sendEmail(email: OutboundEmail): Promise<SendResult> {
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        from: process.env.EMAIL_FROM ?? "Smallstack <hello@smallstack.dev>",
+        from: process.env.EMAIL_FROM ?? "Stackgraph <hello@stackgraph.dev>",
         to: [email.to],
         subject: email.subject,
         text: email.text,

@@ -27,9 +27,7 @@ export function EdgeFeed({ edges }: { edges: RelationshipEdge[] }) {
             {edge.source.name}
           </Link>
 
-          <span className="mono shrink-0 text-ink-3">
-            {edge.type === "RECOMMENDS" ? "recommends" : "uses"}
-          </span>
+          <span className="mono shrink-0 text-ink-3">uses</span>
 
           <Link
             href={`/c/${edge.target.slug}`}

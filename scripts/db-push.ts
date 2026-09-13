@@ -1,3 +1,4 @@
+import "./load-env";
 import { ensureSchema, getDb } from "../src/lib/db/client";
 
 async function main() {
@@ -6,7 +7,7 @@ async function main() {
     `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`,
   );
   console.log(
-    `Schema applied to ${process.env.DATABASE_URL ?? "file:./.data/smallstack.db"}`,
+    `Schema applied to ${process.env.DATABASE_URL ?? "file:./.data/stackgraph.db"}`,
   );
   console.log(`Tables: ${rows.map((row) => row.name).join(", ")}`);
 }

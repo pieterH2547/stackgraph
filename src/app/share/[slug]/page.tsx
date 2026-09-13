@@ -25,7 +25,7 @@ export async function generateMetadata({
     title: `${company.name}'s stack`,
     description,
     openGraph: {
-      title: `${company.name}'s indie stack`,
+      title: `What ${company.name} runs on`,
       description,
       url: absoluteUrl(`/share/${company.slug}`),
     },
@@ -49,7 +49,7 @@ export default async function SharePage({
           <CompanyLogo name={company.name} logoUrl={company.logoUrl} size="lg" />
           <div className="min-w-0">
             <h1 className="truncate text-2xl font-medium tracking-tight sm:text-3xl">
-              {company.name}&apos;s indie stack
+              What {company.name} runs on
             </h1>
             <p className="mono mt-1 text-ink-3">{company.domain}</p>
           </div>
@@ -78,14 +78,6 @@ export default async function SharePage({
                         {edge.target.domain}
                       </span>
                     </span>
-                    {edge.type === "RECOMMENDS" && (
-                      <span
-                        className="mono shrink-0 text-accent-ink"
-                        title="Recommended"
-                      >
-                        <span aria-hidden>♥</span>
-                      </span>
-                    )}
                   </Link>
                 </li>
               ))}
@@ -101,7 +93,7 @@ export default async function SharePage({
           <Link href="/" className="mono text-ink-3 hover:text-accent-ink">
             {brand.wordmark}
           </Link>
-          <span className="mono text-ink-3">{brand.footerLine}</span>
+          <span className="mono text-ink-3">{brand.category}</span>
         </div>
       </article>
 

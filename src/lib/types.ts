@@ -49,7 +49,7 @@ export interface Company {
   contactEmail: string | null;
   claimName: string | null;
   claimRole: string | null;
-  /** Identity established. The claim still needs three independent tools. */
+  /** Identity established. The claim still needs both sides of the company. */
   claimVerifiedAt: string | null;
   claimedAt: string | null;
   isDemo: boolean;
@@ -62,7 +62,6 @@ export interface Relationship {
   id: string;
   sourceCompanyId: string;
   targetCompanyId: string;
-  type: RelationshipType;
   /** Who stated it. Null only for rows written before attribution existed. */
   reportedByCompanyId: string | null;
   state: RelationshipState;
@@ -73,7 +72,6 @@ export interface Relationship {
 /** A relationship joined with both ends, for feeds and profiles. */
 export interface RelationshipEdge {
   id: string;
-  type: RelationshipType;
   reportedByCompanyId: string | null;
   state: RelationshipState;
   edgeKind: EdgeKind;

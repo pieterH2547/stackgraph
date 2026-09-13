@@ -101,7 +101,7 @@ async function fetchHtml(url: string): Promise<string | null> {
       redirect: "follow",
       signal: AbortSignal.timeout(TIMEOUT_MS),
       headers: {
-        "user-agent": "SmallstackBot/0.1 (+https://smallstack.dev)",
+        "user-agent": "StackgraphBot/0.1 (+https://stackgraph.dev)",
         accept: "text/html",
       },
     });

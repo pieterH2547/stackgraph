@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { brand } from "@/lib/brand";
 
 export default function NotFound() {
   return (
@@ -15,7 +16,7 @@ export default function NotFound() {
           Browse the network
         </Link>
         <Link href="/add" className="btn btn-primary">
-          Add your company
+          {brand.ctaPrimary}
         </Link>
       </div>
     </main>

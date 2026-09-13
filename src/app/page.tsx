@@ -8,7 +8,7 @@ import { padCount } from "@/lib/format";
 import { buildGlobalGraph } from "@/lib/graph";
 import {
   getNetworkStats,
-  listMostUsedEligible,
+  listGrowingNetworks,
   listRecentEdges,
   listRecentlyClaimed,
 } from "@/lib/db/queries";
@@ -16,11 +16,11 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const [stats, edges, claimed, mostUsed, graph] = await Promise.all([
+  const [stats, edges, claimed, growing, graph] = await Promise.all([
     getNetworkStats(),
     listRecentEdges(10),
     listRecentlyClaimed(4),
-    listMostUsedEligible(6),
+    listGrowingNetworks({ days: 7, limit: 6 }),
     buildGlobalGraph(70),
   ]);
 
@@ -78,7 +78,7 @@ export default async function HomePage() {
               </div>
             ) : (
               <p className="max-w-sm text-ink-2">
-                No vendor has claimed a profile yet.
+                No company has claimed a profile yet.
               </p>
             )}
           </div>
@@ -87,15 +87,28 @@ export default async function HomePage() {
 
       <Manifesto />
 
-      {mostUsed.length > 0 && (
+      {/*
+        Movement, not merit. A "most used" table would be a popularity contest
+        with extra steps, and the same names would sit on top of it forever.
+      */}
+      {growing.length > 0 && (
         <section className="mx-auto max-w-6xl px-5 pb-8 sm:px-8">
           <SectionHead
-            title="Most used independent tools"
-            aside={<span className="mono text-ink-3">Incumbents excluded</span>}
+            title="Growing networks"
+            aside={
+              <span className="mono text-ink-3">
+                Last 7 days · independent companies
+              </span>
+            }
           />
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {mostUsed.map(({ company, usedBy }) => (
-              <CompanyCard key={company.id} company={company} usedBy={usedBy} />
+            {growing.map(({ company, gained, total }) => (
+              <CompanyCard
+                key={company.id}
+                company={company}
+                usedBy={total}
+                note={`+${gained} this week`}
+              />
             ))}
           </div>
         </section>
@@ -105,10 +118,10 @@ export default async function HomePage() {
         <div className="card flex flex-col items-start justify-between gap-6 p-7 sm:flex-row sm:items-end">
           <div>
             <h2 className="max-w-md text-2xl font-medium tracking-tight sm:text-3xl">
-              Give credit to the tools helping you build your software.
+              Someone is already running on your software.
             </h2>
             <p className="mono mt-3 text-ink-3">
-              One field to start · 1–5 tools · no vendor form
+              One field to start · two tools · two customers · no vendor form
             </p>
           </div>
           <Link href="/add" className="btn btn-primary shrink-0">
@@ -120,6 +133,10 @@ export default async function HomePage() {
   );
 }
 
+/**
+ * The hero answers "what do I get", not "what do we believe". The belief is
+ * further down, in the manifesto, where it belongs.
+ */
 function Hero({
   companies,
   relationships,
@@ -132,10 +149,10 @@ function Hero({
   return (
     <section className="mx-auto max-w-6xl px-5 pb-16 pt-14 sm:px-8 sm:pb-20 sm:pt-20">
       <h1 className="max-w-4xl text-[clamp(2.5rem,7.5vw,5.25rem)] font-medium leading-[0.95] tracking-[-0.04em]">
-        {brand.tagline}
+        {brand.heroHeadline}
       </h1>
-      <p className="mt-6 max-w-xl text-lg leading-relaxed text-ink-2 sm:text-xl">
-        {brand.subline}
+      <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-2 sm:text-xl">
+        {brand.heroSubline}
       </p>
 
       <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-4">
@@ -168,9 +185,14 @@ function Manifesto() {
     <section className="my-16 bg-ink py-16 text-paper sm:my-20 sm:py-20">
       <div className="mx-auto max-w-6xl px-5 sm:px-8">
         <div className="grid gap-10 lg:grid-cols-2 lg:gap-16">
-          <h2 className="text-[clamp(2rem,5vw,3.25rem)] font-medium leading-[1.02] tracking-[-0.035em]">
-            {brand.manifesto.heading}
-          </h2>
+          <div>
+            <h2 className="text-[clamp(2rem,5vw,3.25rem)] font-medium leading-[1.02] tracking-[-0.035em]">
+              {brand.manifesto.heading}
+            </h2>
+            <p className="mono mt-6 text-paper/50">
+              {brand.manifesto.signature}
+            </p>
+          </div>
           <div>
             <ul className="space-y-3">
               {brand.manifesto.lines.map((line) => (
@@ -201,7 +223,7 @@ function SectionHead({
   aside?: React.ReactNode;
 }) {
   return (
-    <div className="mb-4 flex items-baseline justify-between gap-4 border-b border-line pb-2.5">
+    <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line pb-2.5">
       <h2 className="text-xl font-medium tracking-tight">{title}</h2>
       {aside}
     </div>

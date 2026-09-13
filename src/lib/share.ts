@@ -1,3 +1,4 @@
+import { brand } from "./brand";
 import type { Company, RelationshipEdge } from "./types";
 
 function joinNames(names: string[]): string {
@@ -16,7 +17,7 @@ export function stackShareText(
 ): string {
   const names = edges.map((edge) => edge.target.name).slice(0, 5);
   if (names.length === 0) {
-    return `${company.name} on Smallstack.`;
+    return `${company.name} on ${brand.name}.`;
   }
-  return `${company.name} runs on ${joinNames(names)}. Small software powers small software.`;
+  return `${company.name} runs on ${joinNames(names)}.`;
 }
