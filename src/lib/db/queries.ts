@@ -7,6 +7,7 @@ import type {
   Company,
   CompanySource,
   CompanyStatus,
+  DetectedTool,
   EdgeKind,
   EligibilityReason,
   Relationship,
@@ -34,7 +35,8 @@ function bool(value: unknown): boolean {
 const COMPANY_COLUMNS = `
   id, slug, name, domain, website, logo_url, description, category, audience,
   built_by, status, network_eligible, eligibility_reason, source, generation,
-  detected_at, detected_from, contact_email, claim_name, claim_role,
+  detected_at, detected_from, detected_stack, contact_email, claim_name,
+  claim_role,
   claim_verified_at, claimed_at, is_demo, created_at, updated_at
 `;
 
@@ -44,6 +46,23 @@ const COMPANY_COLUMN_NAMES = COMPANY_COLUMNS.split(",")
 
 function prefixedColumns(prefix: string): string {
   return COMPANY_COLUMN_NAMES.map((column) => `${prefix}.${column}`).join(", ");
+}
+
+function parseDetectedStack(value: unknown): DetectedTool[] | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) return null;
+    const tools = parsed.flatMap((entry): DetectedTool[] => {
+      if (typeof entry !== "object" || entry === null) return [];
+      const { domain, name } = entry as Record<string, unknown>;
+      if (typeof domain !== "string" || !domain) return [];
+      return [{ domain, name: typeof name === "string" && name ? name : domain }];
+    });
+    return tools.length > 0 ? tools : null;
+  } catch {
+    return null;
+  }
 }
 
 export function mapCompany(row: Row): Company {
@@ -65,6 +84,7 @@ export function mapCompany(row: Row): Company {
     generation: Number(row.generation ?? 0),
     detectedAt: optStr(row.detected_at),
     detectedFrom: optStr(row.detected_from),
+    detectedStack: parseDetectedStack(row.detected_stack),
     contactEmail: optStr(row.contact_email),
     claimName: optStr(row.claim_name),
     claimRole: optStr(row.claim_role),
@@ -250,6 +270,7 @@ export interface UpdateCompanyPatch {
   claimedAt?: string | null;
   detectedAt?: string | null;
   detectedFrom?: string | null;
+  detectedStack?: DetectedTool[] | null;
 }
 
 const PATCH_COLUMNS: Record<keyof UpdateCompanyPatch, string> = {
@@ -270,6 +291,7 @@ const PATCH_COLUMNS: Record<keyof UpdateCompanyPatch, string> = {
   claimedAt: "claimed_at",
   detectedAt: "detected_at",
   detectedFrom: "detected_from",
+  detectedStack: "detected_stack",
 };
 
 export async function updateCompany(
@@ -283,9 +305,12 @@ export async function updateCompany(
   if (entries.length === 0) return getCompanyById(id);
 
   const sets = entries.map(([key]) => `${PATCH_COLUMNS[key]} = ?`).join(", ");
-  const args = entries.map(([, value]) =>
-    typeof value === "boolean" ? (value ? 1 : 0) : (value as string | null),
-  );
+  const args = entries.map(([, value]) => {
+    if (typeof value === "boolean") return value ? 1 : 0;
+    // detectedStack is the one structured field; it is stored as JSON.
+    if (Array.isArray(value)) return JSON.stringify(value);
+    return value as string | null;
+  });
 
   await getDb().execute({
     sql: `UPDATE companies SET ${sets}, updated_at = ? WHERE id = ?`,
@@ -312,7 +337,7 @@ export async function touchCompanies(ids: string[]): Promise<void> {
 
 /**
  * Identity established, claim not yet complete. Under the current thesis a
- * profile only turns CLAIMED once both sides of the company are shown, so
+ * profile only turns CLAIMED once two independent tools are credited, so
  * verifying an email is a step, not the finish line.
  */
 export async function recordClaimIdentity(

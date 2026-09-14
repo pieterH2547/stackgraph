@@ -1,3 +1,9 @@
+/** One entry of `detectedStack`. Not a company, and not an edge. */
+export interface DetectedTool {
+  domain: string;
+  name: string;
+}
+
 export type CompanyStatus = "UNCLAIMED" | "CLAIMED";
 
 /**
@@ -53,6 +59,12 @@ export interface Company {
   /** Set when any field on this profile came from reading the public website. */
   detectedAt: string | null;
   detectedFrom: string | null;
+  /**
+   * Third-party hosts this company's own pages load from. A suggestion for the
+   * founder, never a relationship: no edge, no claim credit, no proof on the
+   * other vendor's profile, no outreach.
+   */
+  detectedStack: DetectedTool[] | null;
   contactEmail: string | null;
   claimName: string | null;
   claimRole: string | null;

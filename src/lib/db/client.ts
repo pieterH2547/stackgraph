@@ -1,7 +1,7 @@
 import { createClient, type Client } from "@libsql/client";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { SCHEMA_SQL, TABLES } from "./schema";
+import { ADDITIVE_COLUMNS, SCHEMA_SQL, TABLES } from "./schema";
 
 /**
  * Local development keeps the database in the project. On a serverless host
@@ -66,7 +66,7 @@ export function getDb(): Client {
     g.__stackgraphSchema = undefined;
   }
   if (!g.__stackgraphSchema) {
-    g.__stackgraphSchema = g.__stackgraphDb.executeMultiple(SCHEMA_SQL);
+    g.__stackgraphSchema = applySchema(g.__stackgraphDb);
   }
   return g.__stackgraphDb;
 }
@@ -90,4 +90,21 @@ export async function truncateAll(): Promise<void> {
 export function resetDbConnection(): void {
   g.__stackgraphDb = undefined;
   g.__stackgraphSchema = undefined;
+}
+
+/**
+ * The base schema, then each column added since. A column that is already
+ * there throws, and that is the expected outcome on every run but the first,
+ * so only an unexpected failure is allowed to surface.
+ */
+async function applySchema(db: Client): Promise<void> {
+  await db.executeMultiple(SCHEMA_SQL);
+  for (const statement of ADDITIVE_COLUMNS) {
+    try {
+      await db.execute(statement);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/duplicate column/i.test(message)) throw error;
+    }
+  }
 }

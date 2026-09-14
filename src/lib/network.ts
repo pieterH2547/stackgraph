@@ -16,6 +16,7 @@ import {
 import { track } from "./events";
 import { MAX_TOOLS, REQUIRED_UPSTREAM } from "./limits";
 import { notifyMention } from "./notify";
+import { suggestPoweredBy } from "./signals";
 import { normalizeSiteUrl } from "./url";
 import type { Company, CompanySource, EdgeKind } from "./types";
 
@@ -399,6 +400,15 @@ export async function enrichCompany(companyId: string): Promise<void> {
       detected.contactEmail ??
       (await findPublishedContactEmail(company.website, company.domain));
 
+    /*
+     * What their pages load from, recorded as a question rather than a fact.
+     * It is emphatically not an edge: no claim credit, no proof on the other
+     * vendor's profile, no notification. An unclaimed profile shows it as
+     * "spotted on their website", which is the founder's cue to confirm their
+     * own stack — the only way it can ever become a relationship.
+     */
+    const spotted = await suggestPoweredBy(company.website, company.domain);
+
     await updateCompany(company.id, {
       name: isDerivedName(company.name, company.domain)
         ? detected.name
@@ -409,6 +419,11 @@ export async function enrichCompany(companyId: string): Promise<void> {
       contactEmail,
       detectedAt: detected.detectedAt,
       detectedFrom: "website",
+      detectedStack:
+        company.detectedStack ??
+        (spotted.length > 0
+          ? spotted.slice(0, 6).map(({ domain, name }) => ({ domain, name }))
+          : null),
     });
   } catch {
     // A vendor site being unreachable is not an error worth surfacing.

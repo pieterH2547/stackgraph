@@ -819,3 +819,56 @@ describe("settleClaim is idempotent", () => {
     expect(await countUpstreamCredits(claimed.id)).toBe(2);
   });
 });
+
+/* 20 --------------------------------------------------------------------- */
+describe("tools spotted on a website are not relationships", () => {
+  it("stores them without creating an edge, a credit or a notification", async () => {
+    const { company } = await addCompany({
+      url: "olva.ai",
+      name: "Olva",
+      source: "MENTIONED",
+    });
+
+    const withSignals = await updateCompany(company.id, {
+      detectedStack: [
+        { domain: "vercel.com", name: "Vercel" },
+        { domain: "plausible.io", name: "Plausible" },
+      ],
+      detectedAt: new Date().toISOString(),
+      detectedFrom: "website",
+    });
+
+    // They come back as data…
+    expect(withSignals!.detectedStack).toEqual([
+      { domain: "vercel.com", name: "Vercel" },
+      { domain: "plausible.io", name: "Plausible" },
+    ]);
+
+    // …and they are nothing else. No edges, so no proof anywhere, no claim
+    // progress, no profiles conjured for them, and nobody written to.
+    expect(await countRows("relationships")).toBe(0);
+    expect(await listOutgoingEdges(company.id)).toHaveLength(0);
+    expect(await countUpstreamCredits(company.id)).toBe(0);
+    expect((await getClaimProgress(withSignals!)).upstream).toBe(0);
+    expect(await getCompanyByDomain("vercel.com")).toBeNull();
+    expect(await getCompanyByDomain("plausible.io")).toBeNull();
+    expect(await countRows("notifications")).toBe(0);
+  });
+
+  it("survives a malformed row rather than taking the profile down", async () => {
+    const { company } = await addCompany({
+      url: "olva.ai",
+      name: "Olva",
+      source: "MENTIONED",
+    });
+
+    const { getDb } = await import("@/lib/db/client");
+    for (const value of ["not json", "{}", "[]", '[{"name":"No domain"}]']) {
+      await getDb().execute({
+        sql: `UPDATE companies SET detected_stack = ? WHERE id = ?`,
+        args: [value, company.id],
+      });
+      expect((await getCompanyByDomain("olva.ai"))!.detectedStack).toBeNull();
+    }
+  });
+});

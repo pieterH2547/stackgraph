@@ -25,7 +25,9 @@ export function CompanyCard({
           <span className="truncate font-medium tracking-tight group-hover:text-accent-ink">
             {company.name}
           </span>
-          <StatusBadge status={company.status} className="shrink-0" />
+          {company.networkEligible && (
+            <StatusBadge status={company.status} className="shrink-0" />
+          )}
         </div>
         <p className="mt-0.5 line-clamp-2 text-sm leading-snug text-ink-2">
           {company.description ?? company.domain}
@@ -77,7 +79,7 @@ export function CompanyInline({
         </span>
       </Link>
       {action}
-      <StatusBadge status={company.status} />
+      {company.networkEligible && <StatusBadge status={company.status} />}
     </div>
   );
 }

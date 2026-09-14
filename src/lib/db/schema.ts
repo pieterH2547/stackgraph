@@ -26,11 +26,18 @@ CREATE TABLE IF NOT EXISTS companies (
   generation         INTEGER NOT NULL DEFAULT 0,
   detected_at        TEXT,
   detected_from      TEXT,
+  -- Third-party hosts this company's own pages load from, read once at
+  -- enrichment. NOT relationships: nothing here is an edge, nothing here
+  -- counts towards a claim, and nothing here creates proof on the other
+  -- vendor's profile. It is shown on an unclaimed profile as "spotted on
+  -- their website", which is a question for the founder, not a statement
+  -- about them. A JSON array of { domain, name }.
+  detected_stack     TEXT,
   contact_email      TEXT,
   claim_name         TEXT,
   claim_role         TEXT,
   -- Identity established (email verified, or added by its own founder). The
-  -- claim only completes once both sides of the company have been shown.
+  -- claim only completes once two independent tools have been credited.
   claim_verified_at  TEXT,
   claimed_at         TEXT,
   edit_token         TEXT NOT NULL,
@@ -45,9 +52,10 @@ CREATE INDEX IF NOT EXISTS companies_status_idx  ON companies (status);
 CREATE INDEX IF NOT EXISTS companies_created_idx ON companies (created_at);
 CREATE INDEX IF NOT EXISTS companies_source_idx  ON companies (source);
 
--- "source uses target", always attributed to whoever said it. A relationship
--- is self-reported until the other end confirms it, and nothing here ever
--- claims a verified customer.
+-- "source uses target", always attributed to whoever said it — and that is
+-- always the source, because a company only ever reports its own stack. One
+-- row therefore fills both profiles: powered-by on the source, used-by on the
+-- target. Nothing here ever claims a verified customer.
 CREATE TABLE IF NOT EXISTS relationships (
   id                     TEXT PRIMARY KEY,
   source_company_id      TEXT NOT NULL REFERENCES companies (id) ON DELETE CASCADE,
@@ -118,4 +126,13 @@ export const TABLES = [
   "claims",
   "relationships",
   "companies",
+] as const;
+
+/**
+ * Columns added after the first release. `CREATE TABLE IF NOT EXISTS` does
+ * nothing for a database that already exists, so each of these is applied
+ * separately and a "duplicate column" error is the success case.
+ */
+export const ADDITIVE_COLUMNS = [
+  "ALTER TABLE companies ADD COLUMN detected_stack TEXT",
 ] as const;
