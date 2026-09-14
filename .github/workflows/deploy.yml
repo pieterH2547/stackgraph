@@ -5,15 +5,14 @@
 # job ever holds them. A token pasted into a terminal, a chat or an agent
 # transcript cannot be revoked from there.
 #
-# This replaces nothing about Vercel's own git integration — if the project is
-# connected to the repository, Vercel already builds every push. This exists
-# for the case where it is not connected, or where the gates must pass before
-# anything reaches production.
+# Manual on purpose. When the project is connected to this repository, Vercel
+# already builds every push to main — a push trigger here would mean one
+# commit and two deployments, which is not a fallback, it is a race. Use this
+# when the git integration is not connected, or to deploy a specific moment
+# with the gates proven first.
 name: Deploy
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       target:
@@ -54,7 +53,7 @@ jobs:
       - name: Work out the target
         id: target
         run: |
-          if [ "${{ github.event_name }}" = "push" ] || [ "${{ inputs.target }}" = "production" ]; then
+          if [ "${{ inputs.target }}" = "production" ]; then
             echo "flag=--prod" >> "$GITHUB_OUTPUT"
             echo "name=production" >> "$GITHUB_OUTPUT"
           else
