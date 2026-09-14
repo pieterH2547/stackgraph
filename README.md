@@ -141,7 +141,7 @@ build a schema in a local file instead.
 
 ```bash
 npm run verify           # typecheck + lint + tests + production build
-npm test                 # 56 tests, no network, no mail provider
+npm test                 # 104 tests, no network, no mail provider
 ```
 
 ### Environment
