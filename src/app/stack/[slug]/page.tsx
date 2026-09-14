@@ -3,8 +3,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CompanyInline } from "@/components/CompanyCard";
 import { CompanyLogo } from "@/components/CompanyLogo";
+import { RetractCredit } from "@/components/RetractCredit";
 import { StackEditor } from "@/components/StackEditor";
-import { saveStack } from "@/actions/stack";
+import { retractCredit, saveStack } from "@/actions/stack";
 import { brand } from "@/lib/brand";
 import { getCompanyBySlug, listOutgoingEdges } from "@/lib/db/queries";
 import { MAX_TOOLS, REQUIRED_UPSTREAM } from "@/lib/limits";
@@ -117,6 +118,11 @@ export default async function StackPage({
   );
 }
 
+/**
+ * What this company has already said it runs on, each line removable. A
+ * mistyped domain would otherwise be a permanent public statement, and the
+ * person who made it is the only one who can take it back.
+ */
 function ExistingList({
   label,
   edges,
@@ -130,13 +136,26 @@ function ExistingList({
     <div className="mt-6">
       <p className="label">{label}</p>
       <div className="border-t border-line">
-        {edges.map((edge) => (
-          <CompanyInline
-            key={edge.id}
-            company={pick(edge)}
-          />
-        ))}
+        {edges.map((edge) => {
+          const tool = pick(edge);
+          return (
+            <CompanyInline
+              key={edge.id}
+              company={tool}
+              action={
+                <RetractCredit
+                  toolName={tool.name}
+                  action={retractCredit.bind(null, edge.id)}
+                />
+              }
+            />
+          );
+        })}
       </div>
+      <p className="mono mt-2 text-ink-3">
+        Wrong tool, or a mistyped address? Remove it — it is your statement
+        about your own stack.
+      </p>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import {
+  deleteOrphanedMention,
   deleteRelationship,
   getCompanyBySlug,
   getEdgeById,
@@ -113,6 +114,51 @@ export async function disputeRelationship(
 
   revalidatePath(routes.profile(edge.source.slug));
   revalidatePath(routes.profile(edge.target.slug));
+}
+
+/**
+ * You credited a tool and it was the wrong one.
+ *
+ * This has to exist. Somebody typed `apolo.io` meaning `apollo.io`, and the
+ * graph dutifully created a profile for a Costa Rican payments company and
+ * told the world SourcrLab runs on it. Every vendor will mistype a domain
+ * eventually, and until now the statement was permanent.
+ *
+ * Only the company that made the statement can withdraw it — it is their
+ * account of their own stack, so it is theirs to correct, and nobody else has
+ * standing to edit it.
+ *
+ * A claim already earned is not revoked by this. A claim that could be undone
+ * by later editing would make the status depend on your current stack rather
+ * than on having shown it, and that punishes the honest correction this
+ * button exists for.
+ */
+export async function retractCredit(relationshipId: string): Promise<void> {
+  const edge = await getEdgeById(relationshipId);
+  if (!edge) return;
+  if (!(await canEdit(edge.source.id))) return;
+
+  await deleteRelationship(edge.id);
+
+  /*
+   * The credited profile may have existed only because of this statement. If
+   * nothing else in the graph says anything about it and nobody has claimed
+   * it, it goes too: a company that never asked to be here should not be left
+   * with an empty profile because of somebody else's typo.
+   */
+  const removed = await deleteOrphanedMention(edge.target.id);
+
+  await track("credit_retracted", {
+    companyId: edge.source.id,
+    targetCompanyId: removed ? null : edge.target.id,
+    props: { domain: edge.target.domain, profileRemoved: removed },
+  });
+
+  revalidatePath(routes.home());
+  revalidatePath(routes.network());
+  revalidatePath(routes.stack(edge.source.slug));
+  revalidatePath(routes.profile(edge.source.slug));
+  if (!removed) revalidatePath(routes.profile(edge.target.slug));
 }
 
 export async function trackShare(slug: string, channel: string): Promise<void> {

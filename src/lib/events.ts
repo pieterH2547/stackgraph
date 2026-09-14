@@ -17,6 +17,7 @@ export const EVENT_NAMES = [
   "first_tool_added",
   "relationship_created",
   "relationship_disputed",
+  "credit_retracted",
   "stack_completed",
   "claim_completed",
   "share_clicked",

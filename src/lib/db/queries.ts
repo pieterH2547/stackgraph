@@ -505,6 +505,50 @@ export async function setRelationshipState(
   });
 }
 
+/**
+ * A profile that exists only because somebody said they used it, where that
+ * was the only thing ever said about it.
+ *
+ * Deliberately narrow. It must never remove a company that anyone has claimed,
+ * started to claim, added themselves, or that anything else in the graph
+ * points at — the only case is a profile conjured by a statement that has
+ * since been withdrawn. That profile was never the company's own and nobody
+ * is left saying anything about it.
+ */
+export async function deleteOrphanedMention(companyId: string): Promise<boolean> {
+  const { rows } = await getDb().execute({
+    sql: `SELECT
+            (SELECT COUNT(*) FROM relationships
+              WHERE source_company_id = ?1 OR target_company_id = ?1) AS edges,
+            (SELECT COUNT(*) FROM claims WHERE company_id = ?1)        AS claims,
+            c.source, c.status, c.claim_verified_at, c.is_demo
+          FROM companies c WHERE c.id = ?1`,
+    args: [companyId],
+  });
+
+  const row = rows[0];
+  if (!row) return false;
+  if (Number(row.edges) > 0) return false;
+  if (Number(row.claims) > 0) return false;
+  if (row.source !== "MENTIONED") return false;
+  if (row.status !== "UNCLAIMED") return false;
+  if (row.claim_verified_at !== null) return false;
+
+  await getDb().execute({
+    sql: `DELETE FROM notifications WHERE company_id = ?`,
+    args: [companyId],
+  });
+  await getDb().execute({
+    sql: `DELETE FROM events WHERE company_id = ?1 OR target_company_id = ?1`,
+    args: [companyId],
+  });
+  await getDb().execute({
+    sql: `DELETE FROM companies WHERE id = ?`,
+    args: [companyId],
+  });
+  return true;
+}
+
 export async function deleteRelationship(relationshipId: string): Promise<void> {
   await getDb().execute({
     sql: `DELETE FROM relationships WHERE id = ?`,

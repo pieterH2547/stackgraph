@@ -872,3 +872,102 @@ describe("tools spotted on a website are not relationships", () => {
     }
   });
 });
+
+/* 21 --------------------------------------------------------------------- */
+describe("a credit can be withdrawn by whoever gave it", () => {
+  it("removes the edge and the profile it conjured", async () => {
+    // The real case: apolo.io typed for apollo.io, and the graph created a
+    // profile for a Costa Rican payments company and said SourcrLab runs on it.
+    const acme = await joinedCompany("acme.dev", "Acme");
+    await submitStack({
+      companyId: acme.id,
+      tools: [
+        { website: "apolo.io", name: "Apolo" },
+        { website: "plausible.io", name: "Plausible" },
+      ],
+    });
+    expect((await getCompanyByDomain("acme.dev"))!.status).toBe("CLAIMED");
+
+    const wrong = (await getCompanyByDomain("apolo.io"))!;
+    expect(wrong.source).toBe("MENTIONED");
+
+    const edge = (await listOutgoingEdges(acme.id)).find(
+      (e) => e.target.domain === "apolo.io",
+    )!;
+
+    const { deleteRelationship, deleteOrphanedMention } = await import(
+      "@/lib/db/queries"
+    );
+    await deleteRelationship(edge.id);
+    expect(await deleteOrphanedMention(wrong.id)).toBe(true);
+
+    // Gone from both sides, and the profile nobody asked for is gone too.
+    expect(await getCompanyByDomain("apolo.io")).toBeNull();
+    expect(await listOutgoingEdges(acme.id)).toHaveLength(1);
+  });
+
+  it("keeps a claim that was already earned", async () => {
+    // A claim undone by later editing would depend on your current stack
+    // rather than on having shown it, which punishes an honest correction.
+    const acme = await joinedCompany("acme.dev", "Acme");
+    await submitStack({
+      companyId: acme.id,
+      tools: [
+        { website: "tally.so", name: "Tally" },
+        { website: "plausible.io", name: "Plausible" },
+      ],
+    });
+
+    const edge = (await listOutgoingEdges(acme.id))[0];
+    const { deleteRelationship } = await import("@/lib/db/queries");
+    await deleteRelationship(edge.id);
+
+    const after = (await getCompanyByDomain("acme.dev"))!;
+    expect(after.status).toBe("CLAIMED");
+    expect(await countUpstreamCredits(after.id)).toBe(1);
+  });
+
+  it("never deletes a profile that is anything more than a mention", async () => {
+    const { deleteOrphanedMention } = await import("@/lib/db/queries");
+
+    // Claimed.
+    const claimed = await claimProfile(await joinedCompany("one.dev", "One"));
+    expect(await deleteOrphanedMention(claimed.id)).toBe(false);
+
+    // Added by its own founder rather than mentioned.
+    const self = await joinedCompany("two.dev", "Two");
+    expect(await deleteOrphanedMention(self.id)).toBe(false);
+
+    // Mentioned, but identity verified — somebody is on their way in.
+    const acme = await joinedCompany("acme.dev", "Acme");
+    await submitStack({
+      companyId: acme.id,
+      tools: [{ website: "tally.so", name: "Tally" }],
+    });
+    const tally = await verifyIdentity((await getCompanyByDomain("tally.so"))!);
+    const { deleteRelationship } = await import("@/lib/db/queries");
+    await deleteRelationship((await listOutgoingEdges(acme.id))[0].id);
+    expect(await deleteOrphanedMention(tally.id)).toBe(false);
+    expect(await getCompanyByDomain("tally.so")).not.toBeNull();
+  });
+
+  it("never deletes a profile something else still points at", async () => {
+    const acme = await joinedCompany("acme.dev", "Acme");
+    const kettle = await joinedCompany("kettle.app", "Kettle");
+    for (const company of [acme, kettle]) {
+      await submitStack({
+        companyId: company.id,
+        tools: [{ website: "tally.so", name: "Tally" }],
+      });
+    }
+
+    const tally = (await getCompanyByDomain("tally.so"))!;
+    const { deleteRelationship, deleteOrphanedMention } = await import(
+      "@/lib/db/queries"
+    );
+    // Acme retracts; Kettle still says it uses Tally.
+    await deleteRelationship((await listOutgoingEdges(acme.id))[0].id);
+    expect(await deleteOrphanedMention(tally.id)).toBe(false);
+    expect(await getCompanyByDomain("tally.so")).not.toBeNull();
+  });
+});
