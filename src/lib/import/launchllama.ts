@@ -51,6 +51,8 @@ export interface Signals {
 
 export interface Scored extends Candidate {
   signals: Signals;
+  /** Directory upvotes. Ordering only — never rendered, never a ranking. */
+  popularity: number;
   /** 0–6: how many criteria have positive evidence. */
   icpScore: number;
   /** How much of the rubric we could actually determine. */
@@ -78,6 +80,7 @@ const FIELDS = {
   team: ["employees", "team_size", "company_size", "size", "headcount", "team"],
   date: ["launch_date", "launched_at", "founded", "created_at", "date", "published_at", "updated_at", "launch"],
   contact: ["email", "contact", "contact_email", "founder", "maker", "maker_name", "twitter", "x", "founder_twitter", "linkedin"],
+  // Same fields, but only the ones that could be a route rather than a name.
   pricing: ["pricing", "price", "plan", "pricing_model", "business_model"],
 } as const;
 
@@ -104,9 +107,35 @@ function pick(record: Record<string, string>, names: readonly string[]): string 
   return "";
 }
 
-/** Every value joined, for keyword matching across the whole row. */
-function haystack(record: Record<string, string>): string {
-  return Object.values(record).join(" ").toLowerCase();
+/**
+ * What the keyword rules are allowed to read.
+ *
+ * Not every column: matching across the whole row let the directory's own tag
+ * "Automation" make a maker of industrial rubber bellows look like software,
+ * and a listing URL containing the word "products" count as commercial
+ * evidence. Judgement reads what the company said about itself, plus the tags
+ * — and the software cue reads the self-description alone, because a tag
+ * someone else assigned is not a claim about the product.
+ */
+function judgeText(record: Record<string, string>, description: string): string {
+  return [
+    pick(record, FIELDS.name),
+    description,
+    pick(record, FIELDS.category),
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+function selfDescription(record: Record<string, string>, description: string): string {
+  return [pick(record, FIELDS.name), description].join(" ").toLowerCase();
+}
+
+/** Directory traction, used for ordering only and never shown to anyone. */
+function popularityOf(record: Record<string, string>): number {
+  const raw = pick(record, ["upvotes", "votes", "points", "score", "stars"]);
+  const value = Number(raw.replace(/[^\d.-]/g, ""));
+  return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -127,8 +156,10 @@ const EXCLUSIONS: { reason: string; patterns: RegExp }[] = [
     patterns: /\b(coaching|mentorship program|training course|bootcamp|newsletter sponsorship|ghostwriting|virtual assistant service|bookkeeping service|accounting firm|law firm|recruitment agency)\b/,
   },
   {
+    // A directory is a competitor with no stack of its own to report, and the
+    // real export is full of them: "Free SaaS directory for founders".
     reason: "marketplace or directory without a software product",
-    patterns: /\b(marketplace for|directory of|list of|curated list|job board|classifieds|aggregator of|browse \d+ )\b/,
+    patterns: /\b(marketplace for|directory|directories|list of|curated list|job board|classifieds|aggregator of|browse \d+ |submit your (tool|startup|product)|launch platform|promote (your |their )?products?|community for)\b/,
   },
   {
     reason: "crypto or token project",
@@ -151,6 +182,15 @@ const EXCLUSIONS: { reason: string; patterns: RegExp }[] = [
     patterns: /^(ai (chat|assistant|tool|wrapper|gpt)|chatgpt (for|wrapper)|gpt-?\d? (wrapper|clone)|ai powered tool)\.?$/,
   },
 ];
+
+/**
+ * A product living on somebody else's free subdomain. Not a rule about
+ * quality — plenty of good things start there — but a company that has not
+ * registered a domain is usually a project rather than a business, and the
+ * cohort is chosen to maximise the chance of a claim.
+ */
+const FREE_HOST =
+  /\.(github\.io|gitlab\.io|vercel\.app|netlify\.app|pages\.dev|web\.app|firebaseapp\.com|herokuapp\.com|streamlit\.app|replit\.app|glitch\.me|notion\.site|carrd\.co|framer\.website|webflow\.io|wixsite\.com|substack\.com|gumroad\.com)$/i;
 
 /* -------------------------------------------------------------------------- */
 /* signals                                                                    */
@@ -176,6 +216,21 @@ const SMALL_TEAM_CUES =
 
 const LARGE_TEAM_CUES =
   /\b(global leader|market leader|enterprise sales team|thousands of employees|offices in \d+|series [c-z]\b)\b/;
+
+/**
+ * Something you could actually follow: an email address, an @handle, or a URL.
+ * A plain human name is not a contact route, however nice it is to have.
+ */
+function isContactRoute(value: string): boolean {
+  const text = value.trim();
+  if (!text) return false;
+  return (
+    /[^\s@]+@[^\s@]+\.[^\s@]+/.test(text) ||
+    /(^|\s)@[A-Za-z0-9_]{2,}/.test(text) ||
+    /https?:\/\//.test(text) ||
+    /(twitter|x)\.com\/|linkedin\.com\//.test(text)
+  );
+}
 
 /** e.g. "1-10", "2", "11–50 employees". Anything over 50 is a no. */
 function teamFromSize(value: string): Signal {
@@ -219,13 +274,14 @@ export function scoreRecord(
 ): Scored {
   const record = normalizeRecord(raw);
   const now = options.now ?? Date.now();
-  const text = haystack(record);
 
   const rawName = pick(record, FIELDS.name);
   const rawWebsite = pick(record, FIELDS.website);
   const description = pick(record, FIELDS.description);
   const sourceCategory = pick(record, FIELDS.category);
   const site = rawWebsite ? options.normalizeSite(rawWebsite) : null;
+  const text = judgeText(record, description);
+  const own = selfDescription(record, description);
 
   const candidate: Candidate = {
     name: rawName || (site ? site.domain : ""),
@@ -253,6 +309,9 @@ export function scoreRecord(
       }
     }
   }
+  if (!exclusionReason && site && FREE_HOST.test(site.domain)) {
+    exclusionReason = "no domain of its own";
+  }
   if (!exclusionReason && options.enriched?.reachable === false) {
     exclusionReason = "site did not respond";
   }
@@ -263,7 +322,7 @@ export function scoreRecord(
   const contactField = pick(record, FIELDS.contact);
   const enriched = options.enriched;
 
-  const software: Signal = SOFTWARE_CUES.test(text) ? "yes" : "unknown";
+  const software: Signal = SOFTWARE_CUES.test(own) ? "yes" : "unknown";
 
   let smallTeam: Signal = teamField ? teamFromSize(teamField) : "unknown";
   if (smallTeam === "unknown" && SMALL_TEAM_CUES.test(text)) smallTeam = "yes";
@@ -273,18 +332,25 @@ export function scoreRecord(
   if (enriched?.reachable === true && active !== "no") active = "yes";
 
   const b2bUseCase: Signal =
-    B2B_CUES.test(text) && description.length >= 15 ? "yes" : "unknown";
+    B2B_CUES.test(own) && description.length >= 15 ? "yes" : "unknown";
 
-  let contactable: Signal = contactField ? "yes" : "unknown";
+  /*
+   * A maker's *name* is not a way to reach them, and a directory export is
+   * full of names. Counting those made 97% of a real 3,453-row directory look
+   * contactable, which would have quietly inflated the one metric that decides
+   * whether a mention can ever convert. Only something that could actually be
+   * followed counts: an address, a handle, or a link.
+   */
+  let contactable: Signal = isContactRoute(contactField) ? "yes" : "unknown";
   if (enriched?.contactEmail) contactable = "yes";
-  else if (enriched && enriched.contactEmail === null && !contactField) {
+  else if (enriched && enriched.contactEmail === null && contactable !== "yes") {
     contactable = "no";
   }
 
   let stackRichness: Signal = "unknown";
   if (enriched?.detectedTools) {
     stackRichness = enriched.detectedTools.length >= 2 ? "yes" : "no";
-  } else if (/\b(integrat\w+|zapier|webhook|api|embed|works with)\b/.test(text)) {
+  } else if (/\b(integrat\w+|zapier|webhook|api|embed|works with)\b/.test(own)) {
     // Someone who integrates with other products tends to run on them too.
     stackRichness = "yes";
   }
@@ -310,6 +376,7 @@ export function scoreRecord(
   return {
     ...candidate,
     signals,
+    popularity: popularityOf(record),
     icpScore,
     confidence,
     exclusionReason,
@@ -335,6 +402,9 @@ export function byImportPriority(a: Scored, b: Scored): number {
     CONFIDENCE_RANK[b.confidence] - CONFIDENCE_RANK[a.confidence] ||
     SIGNAL_RANK[b.signals.contactable] - SIGNAL_RANK[a.signals.contactable] ||
     SIGNAL_RANK[b.signals.stackRichness] - SIGNAL_RANK[a.signals.stackRichness] ||
+    // Traction in the directory they are already listed in. Alphabetical was
+    // the previous tiebreak, which put a whole tier in name order.
+    b.popularity - a.popularity ||
     a.domain.localeCompare(b.domain)
   );
 }

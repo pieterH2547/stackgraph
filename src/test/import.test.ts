@@ -253,3 +253,96 @@ describe("reading and writing the review file", () => {
     expect(parseCsv("﻿name,website\nA,a.dev\n")[0].name).toBe("A");
   });
 });
+
+describe("contactability means a route, not a name", () => {
+  it("does not count a maker's name as a way to reach them", () => {
+    // The real LaunchLlama export carries maker_name on almost every row, so
+    // counting it made 97% of a 3,453-row directory look reachable — and
+    // contactability is the factor that decides whether a mention converts.
+    const row = score({
+      Name: "Thing",
+      Website: "thing.dev",
+      Description: "A tool for teams.",
+      maker_name: "Lukas Ogiermann",
+    });
+    expect(row.signals.contactable).toBe("unknown");
+  });
+
+  it("counts an address, a handle or a link", () => {
+    for (const value of [
+      "hello@thing.dev",
+      "@thingapp",
+      "https://x.com/thingapp",
+      "linkedin.com/in/someone",
+    ]) {
+      const row = score({
+        Name: "Thing",
+        Website: "thing.dev",
+        Description: "A tool for teams.",
+        contact: value,
+      });
+      expect(row.signals.contactable, value).toBe("yes");
+    }
+  });
+});
+
+describe("keyword rules read the company, not the whole row", () => {
+  it("does not let a directory tag make a non-software listing software", () => {
+    // A real row from the export: the directory tagged it "Automation", which
+    // made it read as software while the rules looked at every column.
+    const row = score({
+      Name: "Customrubber Bellows",
+      Website: "https://customrubber-bellows.com",
+      Description: "Tailor-made rubber bellows for industrial applications",
+      categories: "Automation, Other",
+      launchllama_url: "https://tools.launchllama.co/products/customrubber-bellows",
+    });
+
+    expect(row.signals.software).toBe("unknown");
+    expect(row.importRecommended).toBe(false);
+  });
+
+  it("excludes a directory, which has no stack of its own to report", () => {
+    for (const description of [
+      "Free SaaS directory for founders and indie hackers",
+      "Weekly product launch platform for makers and indie builders",
+      "Community for indie SaaS founders to promote products weekly",
+    ]) {
+      const row = score({ Name: "X", Website: "x.dev", Description: description });
+      expect(row.exclusionReason, description).toBe(
+        "marketplace or directory without a software product",
+      );
+    }
+  });
+
+  it("breaks a score tie on directory traction rather than the alphabet", () => {
+    const base = {
+      Description: "Async standup software for remote teams.",
+      maker: "@a",
+      launch_date: "2026-06-01",
+    };
+    const quiet = score({ ...base, Name: "Aaa", Website: "aaa.dev", upvotes: "3" });
+    const busy = score({ ...base, Name: "Zzz", Website: "zzz.dev", upvotes: "900" });
+
+    expect(quiet.icpScore).toBe(busy.icpScore);
+    expect([quiet, busy].sort(byImportPriority)[0].domain).toBe("zzz.dev");
+  });
+});
+
+describe("a company without a domain of its own", () => {
+  it("is excluded, because it is usually a project rather than a business", () => {
+    for (const website of [
+      "https://inakm.github.io",
+      "https://thing.vercel.app",
+      "https://thing.netlify.app",
+    ]) {
+      const row = score({
+        Name: "Thing",
+        Website: website,
+        Description: "Async standup software for remote teams.",
+      });
+      expect(row.exclusionReason, website).toBe("no domain of its own");
+      expect(row.importRecommended).toBe(false);
+    }
+  });
+});

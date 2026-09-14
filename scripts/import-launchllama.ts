@@ -29,7 +29,7 @@ import {
   updateCompany,
 } from "../src/lib/db/queries";
 import { parseCsv } from "../src/lib/import/table";
-import { tryNormalizeSiteUrl } from "../src/lib/url";
+import { nameFromDomain, tryNormalizeSiteUrl } from "../src/lib/url";
 
 const DEFAULT_IN = "data/launchllama-stackgraph-review.csv";
 
@@ -137,6 +137,21 @@ function readRows(csv: string): Row[] {
     }));
 }
 
+/**
+ * A directory's "name" field is sometimes a tagline: "API-first Image Hosting
+ * for Developers & AI Agents" is not what to put at the top of a profile. In
+ * that case the domain is the better guess, and it is marked as derived, so
+ * site detection replaces it with whatever the company actually calls itself.
+ * The tagline is not thrown away — it becomes the one-liner if there isn't one.
+ */
+function profileName(name: string, domain: string): { name: string; tagline: string } {
+  const wordCount = name.split(/\s+/).filter(Boolean).length;
+  const looksLikeTagline = wordCount > 4 || name.length > 34;
+  return looksLikeTagline
+    ? { name: nameFromDomain(domain), tagline: name }
+    : { name, tagline: "" };
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const url = resolvedDatabaseUrl();
@@ -160,6 +175,9 @@ async function main() {
       continue;
     }
 
+    const { name, tagline } = profileName(row.name, site.domain);
+    const description = row.description || tagline;
+
     const existing = options.write
       ? await getCompanyByDomain(site.domain)
       : null;
@@ -171,9 +189,7 @@ async function main() {
        * only fills genuine blanks.
        */
       const patch = {
-        ...(existing.description || !row.description
-          ? {}
-          : { description: row.description }),
+        ...(existing.description || !description ? {} : { description }),
         ...(existing.category || !row.category
           ? {}
           : { category: row.category }),
@@ -197,7 +213,7 @@ async function main() {
 
     if (!options.write) {
       counts.created++;
-      console.log(`  would create  ${site.domain.padEnd(28)} ${row.name}`);
+      console.log(`  would create  ${site.domain.padEnd(28)} ${name}`);
       continue;
     }
 
@@ -207,10 +223,10 @@ async function main() {
      * and notifyMention is never called: an import is not outreach.
      */
     await createCompany({
-      name: row.name,
+      name,
       domain: site.domain,
       website: site.website,
-      description: row.description || null,
+      description: description || null,
       category: row.category || null,
       audience: row.audience || null,
       source: "LAUNCHLLAMA",
@@ -218,7 +234,7 @@ async function main() {
       generation: 0,
     });
     counts.created++;
-    console.log(`  created  ${site.domain.padEnd(28)} ${row.name}`);
+    console.log(`  created  ${site.domain.padEnd(28)} ${name}`);
   }
 
   const line = "-".repeat(64);

@@ -13,6 +13,7 @@
  */
 import "./load-env";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { dirname } from "node:path";
 import { detectSite, findPublishedContactEmail } from "../src/lib/detect";
 import { mapCategory } from "../src/lib/import/category";
@@ -30,13 +31,29 @@ import { suggestPoweredBy } from "../src/lib/signals";
 import { tryNormalizeSiteUrl } from "../src/lib/url";
 
 const DEFAULT_OUT = "data/launchllama-stackgraph-review.csv";
+/**
+ * Reading 1,200 sites takes about a quarter of an hour of somebody else's
+ * bandwidth. The rubric, meanwhile, wants iterating on — the first pass over
+ * the real directory put a maker of industrial rubber bellows in the top ten.
+ * Caching what each site said makes a rubric change cost seconds instead of
+ * another sweep, which is the difference between tuning it and living with it.
+ */
+const DEFAULT_CACHE = "data/.launchllama-site-cache.json";
 
 interface Options {
   in: string;
   out: string;
   limit: number;
   enrich: boolean;
+  /**
+   * Read at most this many sites, best offline candidates first. Reading every
+   * site in a 3,700-row directory is an hour of somebody else's bandwidth to
+   * settle rows that are already excluded, so the default bounds it.
+   */
+  enrichTop: number;
   concurrency: number;
+  cache: string;
+  refresh: boolean;
 }
 
 function parseArgs(argv: string[]): Options {
@@ -56,7 +73,10 @@ function parseArgs(argv: string[]): Options {
     out: flags.get("out") ?? DEFAULT_OUT,
     limit: Number(flags.get("limit") ?? 0) || 0,
     enrich: flags.get("enrich") === "true",
-    concurrency: Number(flags.get("concurrency") ?? 6) || 6,
+    enrichTop: Number(flags.get("enrich-top") ?? 800) || 800,
+    concurrency: Number(flags.get("concurrency") ?? 8) || 8,
+    cache: flags.get("cache") ?? DEFAULT_CACHE,
+    refresh: flags.get("refresh") === "true",
   };
 }
 
@@ -170,15 +190,52 @@ async function main() {
   if (!options.enrich) {
     scored = considered.map((raw) => score(raw));
   } else {
-    // Score once to find the usable websites, then read only those.
+    /*
+     * Score offline first. That is free and it already rules out the excluded
+     * rows and ranks the rest, so the expensive pass reads only the sites that
+     * could plausibly make the cohort — best candidates first.
+     */
     const first = considered.map((raw) => score(raw));
-    console.log(`Reading ${first.filter((r) => r.website).length} websites…`);
 
+    const shortlist = new Set(
+      first
+        .map((row, index) => ({ row, index }))
+        .filter(({ row }) => row.website && !row.exclusionReason)
+        .sort((a, b) => byImportPriority(a.row, b.row))
+        .slice(0, options.enrichTop)
+        .map(({ index }) => index),
+    );
+
+    console.log(
+      `Reading ${shortlist.size} websites (best offline candidates first, --enrich-top=${options.enrichTop})…`,
+    );
+
+    const cache: Record<string, EnrichedFacts> =
+      !options.refresh && existsSync(options.cache)
+        ? JSON.parse(await readFile(options.cache, "utf8"))
+        : {};
+    const cachedAtStart = Object.keys(cache).length;
+    if (cachedAtStart) console.log(`  ${cachedAtStart} already cached`);
+
+    let done = 0;
+    let read = 0;
     const facts = await mapLimit(first, options.concurrency, async (row, i) => {
-      if (!row.website) return undefined;
-      if ((i + 1) % 25 === 0) console.log(`  …${i + 1}/${first.length}`);
-      return enrichOne(row.website, row.domain);
+      if (!shortlist.has(i)) return undefined;
+
+      const hit = cache[row.domain];
+      if (hit) return hit;
+
+      const result = await enrichOne(row.website, row.domain);
+      cache[row.domain] = result;
+      read++;
+      done++;
+      if (done % 50 === 0) console.log(`  …${done}/${shortlist.size}`);
+      return result;
     });
+
+    await mkdir(dirname(options.cache), { recursive: true });
+    await writeFile(options.cache, JSON.stringify(cache), "utf8");
+    console.log(`  read ${read} sites, cache now ${Object.keys(cache).length}`);
 
     scored = considered.map((raw, i) => score(raw, facts[i]));
   }
@@ -231,6 +288,11 @@ async function main() {
       `\nNote: without --enrich, activity, contactability and stack richness` +
         `\nstay unknown for most rows, so these scores are a floor rather than` +
         `\nan estimate. Re-run with --enrich before trusting the cohort.`,
+    );
+  } else {
+    console.log(
+      `\nNote: only the best ${options.enrichTop} offline candidates had their` +
+        `\nsites read. Rows below that are a floor, not an estimate.`,
     );
   }
   console.log(`\nReview file: ${options.out}`);

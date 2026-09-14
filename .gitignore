@@ -42,3 +42,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Import working files. All regenerable from the two scripts, and a dump of
+# somebody else's public directory is not ours to vendor into a repository:
+#   npm run launchllama:fetch
+#   npm run launchllama:score -- --in=data/launchllama.csv --enrich
+/data/
