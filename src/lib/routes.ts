@@ -17,6 +17,10 @@ export const routes = {
   claimVerify: (slug: string, token: string) =>
     `/claim/${slug}/verify?token=${token}`,
   claimExpired: () => "/claim/expired",
+  search: () => "/search",
+  searchFor: (q: string) => `/search?q=${encodeURIComponent(q)}`,
+  categories: () => "/categories",
+  category: (category: string) => `/categories/${encodeURIComponent(category)}`,
   signIn: () => "/signin",
   signInFor: (slug: string) => `/signin?claim=${encodeURIComponent(slug)}`,
   dashboard: () => "/dashboard",

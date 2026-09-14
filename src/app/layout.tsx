@@ -67,18 +67,25 @@ async function SiteHeader() {
         </Link>
 
         <nav className="flex items-center gap-3 sm:gap-5">
-          {/* The label is the first thing to go when the header gets tight. */}
+          {/* Search first: looking something up is the most common reason
+              to be here without an account. Labels shorten before they go. */}
           <Link
-            href="/network"
-            className="mono hidden text-ink-2 transition-colors hover:text-accent-ink sm:inline"
+            href={routes.search()}
+            className="mono text-ink-2 transition-colors hover:text-accent-ink"
           >
-            The network
+            Search
           </Link>
           <Link
-            href="/network"
-            className="mono text-ink-2 transition-colors hover:text-accent-ink sm:hidden"
+            href={routes.categories()}
+            className="mono hidden text-ink-2 transition-colors hover:text-accent-ink sm:inline"
           >
-            Network
+            Categories
+          </Link>
+          <Link
+            href={routes.network()}
+            className="mono hidden text-ink-2 transition-colors hover:text-accent-ink md:inline"
+          >
+            The network
           </Link>
           {user ? (
             <>
@@ -124,10 +131,16 @@ function SiteFooter() {
             {brand.ctaPrimary}
           </Link>
           <Link
-            href="/network"
+            href={routes.categories()}
             className="mono text-ink-2 transition-colors hover:text-accent-ink"
           >
-            Browse
+            Categories
+          </Link>
+          <Link
+            href={routes.network()}
+            className="mono text-ink-2 transition-colors hover:text-accent-ink"
+          >
+            The network
           </Link>
           <span className="mono text-ink-3">{brand.wordmark} · MVP</span>
         </div>

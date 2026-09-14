@@ -765,6 +765,85 @@ export interface CompanyWithCounts extends Company {
   notifications: number;
 }
 
+/** A company plus the two counts every list surface shows. */
+function mapCompanyWithCounts(row: Row): CompanyWithCounts {
+  return {
+    ...mapCompany(row),
+    outgoing: Number(row.outgoing ?? 0),
+    incoming: Number(row.incoming ?? 0),
+    notifications: Number(row.notifications ?? 0),
+  };
+}
+
+/**
+ * Public search. Wider than the typeahead the stack editor uses: a visitor
+ * looking up a company wants everything that matches, not the best six.
+ */
+export async function findCompanies(
+  query: string,
+  limit = 40,
+): Promise<CompanyWithCounts[]> {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const like = `%${q}%`;
+
+  const { rows } = await getDb().execute({
+    sql: `SELECT ${prefixedColumns("c")},
+       (SELECT COUNT(*) FROM relationships r WHERE r.source_company_id = c.id) AS outgoing,
+       (SELECT COUNT(*) FROM relationships r WHERE r.target_company_id = c.id) AS incoming,
+       0 AS notifications
+     FROM companies c
+     WHERE LOWER(c.name) LIKE ? OR c.domain LIKE ? OR LOWER(c.description) LIKE ?
+     ORDER BY
+       CASE WHEN LOWER(c.name) = ? THEN 0
+            WHEN LOWER(c.name) LIKE ? THEN 1
+            ELSE 2 END,
+       incoming DESC, outgoing DESC, c.name ASC
+     LIMIT ?`,
+    args: [like, like, like, q, `${q}%`, limit],
+  });
+
+  return rows.map(mapCompanyWithCounts);
+}
+
+/** Every category in use, with how many companies sit in it. */
+export async function listCategoryCounts(): Promise<
+  { category: string; total: number }[]
+> {
+  const { rows } = await getDb().execute(
+    `SELECT category, COUNT(*) AS total FROM companies
+      WHERE category IS NOT NULL AND category != ''
+      GROUP BY category ORDER BY total DESC, category ASC`,
+  );
+  return rows.map((row) => ({
+    category: String(row.category),
+    total: Number(row.total ?? 0),
+  }));
+}
+
+/**
+ * One category, most connected first. Connections are the ordering because
+ * they are the only thing here worth ranking on — and it is a count of what
+ * companies said, not a score of ours.
+ */
+export async function listCompaniesInCategory(
+  category: string,
+  limit = 60,
+): Promise<CompanyWithCounts[]> {
+  const { rows } = await getDb().execute({
+    sql: `SELECT ${prefixedColumns("c")},
+       (SELECT COUNT(*) FROM relationships r WHERE r.source_company_id = c.id) AS outgoing,
+       (SELECT COUNT(*) FROM relationships r WHERE r.target_company_id = c.id) AS incoming,
+       0 AS notifications
+     FROM companies c
+     WHERE c.category = ?
+     ORDER BY incoming DESC, outgoing DESC, c.name ASC
+     LIMIT ?`,
+    args: [category, limit],
+  });
+  return rows.map(mapCompanyWithCounts);
+}
+
 export async function listCompaniesWithCounts(): Promise<CompanyWithCounts[]> {
   const { rows } = await getDb().execute(
     `SELECT ${prefixedColumns("c")},

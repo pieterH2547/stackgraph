@@ -3,7 +3,9 @@ import { CompanyCard } from "@/components/CompanyCard";
 import { EdgeFeed } from "@/components/EdgeFeed";
 import { GlobalGraph } from "@/components/GlobalGraph";
 import { MonoCount } from "@/components/StatusBadge";
+import { SiteSearch } from "@/components/SiteSearch";
 import { brand } from "@/lib/brand";
+import { routes } from "@/lib/routes";
 import { padCount } from "@/lib/format";
 import { buildGlobalGraph } from "@/lib/graph";
 import {
@@ -160,6 +162,26 @@ function Hero({
           {brand.ctaPrimary}
         </Link>
         <p className="mono text-ink-2">{brand.heroAside}</p>
+      </div>
+
+      {/*
+       * The other reason to be here, and the one that needs no account: look
+       * a company up. It sits under the claim CTA rather than above it because
+       * the hero has one job, but it is on the homepage because "who uses X?"
+       * is the question the product's name asks.
+       */}
+      <div className="mt-10 max-w-xl">
+        <SiteSearch placeholder="Look up a company — e.g. Tally, or tally.so" />
+        <p className="mono mt-2 text-ink-3">
+          Or{" "}
+          <Link
+            href={routes.categories()}
+            className="underline decoration-line-strong underline-offset-2 hover:text-accent-ink"
+          >
+            browse by category
+          </Link>
+          .
+        </p>
       </div>
 
       {companies > 0 && (
