@@ -28,7 +28,7 @@ export async function sendEmail(email: OutboundEmail): Promise<SendResult> {
 
   if (!apiKey) {
     console.info(
-      `[stackgraph] email not sent (no RESEND_API_KEY). to=${email.to} subject="${email.subject}"\n${email.text}`,
+      `[whouseswhat] email not sent (no RESEND_API_KEY). to=${email.to} subject="${email.subject}"\n${email.text}`,
     );
     return { delivered: false, transport: "outbox" };
   }

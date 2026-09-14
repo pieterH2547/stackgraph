@@ -1,0 +1,103 @@
+# Generation 0, step two of two: write the plan that was approved.
+#
+# This does not score anything. It downloads the scored file from a specific
+# plan run and imports exactly that, so the cohort that lands is the cohort
+# that was read. It also takes about a minute instead of twenty, because
+# re-deciding is the slow part and re-deciding is what must not happen here.
+#
+# There is no undo. Two things are therefore required and neither has a
+# default that writes: a plan run id, and confirm: yes.
+name: Generation 0 · apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      plan_run_id:
+        description: "Run id of the 'Generation 0 · plan' run you approved"
+        required: true
+      limit:
+        description: "How many to import (0 = all recommended in the plan)"
+        required: true
+        default: "0"
+      confirm:
+        description: 'Type "yes" to write to production'
+        required: true
+        default: "no"
+
+concurrency:
+  group: gen0
+  cancel-in-progress: false
+
+permissions:
+  # To read an artifact from another workflow run.
+  actions: read
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+
+    steps:
+      - name: Refuse without confirmation
+        if: inputs.confirm != 'yes'
+        run: |
+          echo "::error::confirm was '${{ inputs.confirm }}'. Nothing was written."
+          echo "Re-dispatch with confirm: yes once the plan has been read."
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Fetch the approved plan
+        uses: actions/download-artifact@v4
+        with:
+          name: gen0-plan
+          path: data
+          run-id: ${{ inputs.plan_run_id }}
+          github-token: ${{ github.token }}
+
+      # Exits non-zero on a missing, unparseable or empty plan, so a bad plan
+      # stops here rather than importing nothing and reporting success.
+      - name: Check the plan is real
+        id: plan
+        run: npx tsx scripts/plan-summary.ts | tee -a "$GITHUB_OUTPUT"
+
+      # The same list once more, so the log of the run that wrote also contains
+      # what it wrote.
+      - name: Dry run the approved plan
+        run: npm run launchllama:import -- --limit=${{ inputs.limit }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_AUTH_TOKEN: ${{ secrets.DATABASE_AUTH_TOKEN }}
+
+      - name: Import to production
+        run: |
+          npm run launchllama:import -- \
+            --write --remote --confirm-whouseswhat-production \
+            --limit=${{ inputs.limit }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_AUTH_TOKEN: ${{ secrets.DATABASE_AUTH_TOKEN }}
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Generation 0 applied"
+            echo
+            echo "- plan run: ${{ inputs.plan_run_id }}"
+            echo "- plan checksum: \`${{ steps.plan.outputs.checksum }}\`"
+            echo "- recommended in plan: ${{ steps.plan.outputs.recommended }}"
+            echo "- limit: ${{ inputs.limit }}"
+            echo
+            echo "Profiles are UNCLAIMED. No relationships, no claims and no"
+            echo "notifications are created by an import."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -29,7 +29,7 @@ import { tryNormalizeSiteUrl } from "../src/lib/url";
 
 const API = "https://kxdushqmihjyuddcwkpw.supabase.co/functions/v1/api-v1";
 const USER_AGENT =
-  "Stackgraph-import/0.1 (+https://github.com/pieterH2547/stackgraph)";
+  "WhoUsesWhat-import/0.1 (+https://whouseswhat.tech)";
 /** The API caps a page at 50. */
 const PAGE = 50;
 const PAUSE_MS = 250;

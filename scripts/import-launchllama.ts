@@ -7,13 +7,13 @@
  * and only ever deliberately:
  *
  *   npm run launchllama:import -- --write --remote \
- *     --confirm-stackgraph-production --limit=100
+ *     --confirm-whouseswhat-production --limit=100
  *
  * What it refuses to do, by construction rather than by care:
  *
  * - write anything without --write (dry run is the default)
  * - touch a remote database without --remote AND
- *   --confirm-stackgraph-production, both spelled out
+ *   --confirm-whouseswhat-production, both spelled out
  * - import a row the review file didn't recommend
  * - create a single relationship
  * - mark anything CLAIMED
@@ -55,7 +55,7 @@ function parseArgs(argv: string[]): Options {
     write: flags.get("write") === "true",
     local: flags.get("local") === "true",
     remote: flags.get("remote") === "true",
-    confirmed: flags.get("confirm-stackgraph-production") === "true",
+    confirmed: flags.get("confirm-whouseswhat-production") === "true",
   };
 }
 
@@ -88,12 +88,12 @@ function assertTargetAllowed(options: Options, url: string): void {
   if (isRemote) {
     if (!options.remote) {
       throw new Error(
-        `${host} is a remote database. Writing to it needs --remote and --confirm-stackgraph-production.`,
+        `${host} is a remote database. Writing to it needs --remote and --confirm-whouseswhat-production.`,
       );
     }
     if (!options.confirmed) {
       throw new Error(
-        `Refusing to write to ${host} without --confirm-stackgraph-production.`,
+        `Refusing to write to ${host} without --confirm-whouseswhat-production.`,
       );
     }
     console.log("Target:   REMOTE, confirmed twice. Proceeding.");

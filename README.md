@@ -1,4 +1,4 @@
-# Stackgraph
+# Who Uses What
 
 **Find out who uses your software.**
 
@@ -10,10 +10,13 @@ The independent software graph. Every company shows two things:
 Not a directory. Not a launch site. Not a marketplace. The relationships are
 the product; the profiles are almost incidental.
 
-"Independent software" is the *category*, never the brand: naming a product
-after smallness tells people they're smaller than they think they are.
-"Small software powers small software" is a manifesto line, and it lives in
-the manifesto — the hero has to be a reason to claim, not a belief.
+The name is the question the product answers. "Stackgraph" named the
+mechanism, and nobody wants a graph — they want to know who uses their
+software. Same reasoning keeps "independent software" as the *category* and
+never the brand: naming a product after smallness tells people they're smaller
+than they think they are. "Small software powers small software" is a
+manifesto line, and it lives in the manifesto — the hero has to be a reason to
+claim, not a belief.
 
 ---
 
@@ -166,7 +169,7 @@ app with `NEXT_PUBLIC_BASE_PATH=/test1` and add a rewrite on the host site
 ```ts
 // host site's next.config.ts
 async rewrites() {
-  const zone = process.env.STACKGRAPH_ORIGIN; // https://<this app>.vercel.app
+  const zone = process.env.WHOUSESWHAT_ORIGIN; // https://<this app>.vercel.app
   if (!zone) return [];
   return [
     { source: "/test1", destination: `${zone}/test1` },
@@ -399,7 +402,7 @@ The score never reaches a page. It is import logic, not a rating.
 
 Writing is deliberate by construction: dry run is the default, a local write
 still needs `--local`, and a remote one needs `--remote` *and*
-`--confirm-stackgraph-production` *and* a `DATABASE_URL` that really is
+`--confirm-whouseswhat-production` *and* a `DATABASE_URL` that really is
 remote. An import creates `UNCLAIMED` profiles and nothing else — no
 relationships, no claims, no email — and never overwrites a field on an
 existing company with a directory's copy of it.

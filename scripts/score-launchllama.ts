@@ -1,5 +1,5 @@
 /**
- * Phase 2: score a LaunchLlama export for Stackgraph fit and write a review
+ * Phase 2: score a LaunchLlama export for Who Uses What fit and write a review
  * file. Touches no database, sends nothing, and creates nothing.
  *
  *   npm run launchllama:score -- --in=data/launchllama.csv

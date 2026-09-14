@@ -1,0 +1,100 @@
+# Generation 0, step one of two: decide the cohort.
+#
+# Reads Launch Llama's public catalogue, scores it for fit, and prints exactly
+# which domains a write would create. Writes nothing anywhere.
+#
+# The scored file is uploaded as an artifact, and that file — not a fresh
+# score — is what gen0-apply writes. Scoring twice would mean approving one
+# list and importing another: reachability differs between runs, so the count
+# moves. For an operation with no undo, the list you looked at has to be the
+# list that lands.
+name: Generation 0 · plan
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "How many recommended profiles to plan for (0 = all)"
+        required: true
+        default: "200"
+      enrich_top:
+        description: "How many sites to read while scoring"
+        required: true
+        default: "1200"
+
+concurrency:
+  group: gen0
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Gates
+        run: npm run verify -- --quick
+        env:
+          DISABLE_SITE_DETECTION: "1"
+
+      # Reading a thousand strangers' sites is the slow part, so keep what they
+      # said between runs. Re-planning after a rubric change then costs a
+      # minute rather than a quarter of an hour of their bandwidth.
+      - name: Restore the site cache
+        uses: actions/cache@v4
+        with:
+          path: data/.launchllama-site-cache.json
+          key: launchllama-sites-${{ github.run_id }}
+          restore-keys: launchllama-sites-
+
+      - name: Fetch the catalogue
+        run: npm run launchllama:fetch
+
+      - name: Score for fit
+        run: |
+          npm run launchllama:score -- \
+            --in=data/launchllama.csv \
+            --enrich \
+            --enrich-top=${{ inputs.enrich_top }} \
+            --concurrency=10
+
+      # The list, in full, in the log. This is what approval is given against.
+      - name: What a write would create
+        run: npm run launchllama:import -- --limit=${{ inputs.limit }}
+
+      - name: Fingerprint the plan
+        id: fingerprint
+        run: npx tsx scripts/plan-summary.ts >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gen0-plan
+          path: data/launchllama-stackgraph-review.csv
+          retention-days: 30
+
+      - name: How to apply this exact plan
+        run: |
+          {
+            echo "### Generation 0 plan"
+            echo
+            echo "- recommended: **${{ steps.fingerprint.outputs.recommended }}**"
+            echo "- plan checksum: \`${{ steps.fingerprint.outputs.checksum }}\`"
+            echo "- limit asked for: ${{ inputs.limit }}"
+            echo
+            echo "Read the log above for the domains. To import **this** plan:"
+            echo
+            echo "Actions → *Generation 0 · apply* → Run workflow"
+            echo "  plan_run_id: \`${{ github.run_id }}\`"
+            echo "  confirm: \`yes\`"
+            echo
+            echo "Nothing was written by this run."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -13,8 +13,14 @@
  *    belongs in the manifesto; the hero has to be a reason to claim.
  */
 export const brand = {
-  name: "Stackgraph",
-  wordmark: "STACKGRAPH",
+  /*
+   * The name is the question the product answers, which is a better name than
+   * a description of its data structure: nobody wants a graph, they want to
+   * know who uses their software. "Stackgraph" named the mechanism; this names
+   * the reason to visit.
+   */
+  name: "Who Uses What",
+  wordmark: "WHO USES WHAT",
   domain: "whouseswhat.tech",
 
   /** The category this sits in. Not a slogan, not a name. */
@@ -23,7 +29,7 @@ export const brand = {
   /* --- hero: what's in it for the visitor ------------------------------- */
   heroHeadline: "Find out who uses your software.",
   heroSubline:
-    "Stackgraph maps which independent software companies run on which. Claim your company to see who uses your product — and to credit the tools that power you.",
+    "Who Uses What maps which independent software companies run on which. Claim your company to see who uses your product — and to credit the tools that power you.",
   /** Dry qualifier under the hero CTA. */
   heroAside: "No rankings. No sales deck. Just who uses what.",
 
