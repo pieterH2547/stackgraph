@@ -193,7 +193,7 @@ export default async function MetricsPage() {
                 : " · only seeds and self-serve signups so far"}
           </p>
           <p className="mono mt-1 text-ink-3">
-            {m.seedVendors} seeded by hand · {m.incumbentsInGraph} incumbents in
+            {m.seedVendors} we put there · {m.incumbentsInGraph} incumbents in
             the graph · {m.disputedEdges} disputed edges
           </p>
         </section>

@@ -11,7 +11,19 @@ export type CompanyStatus = "UNCLAIMED" | "CLAIMED";
  * flywheel measurement rests on: only companies with source `MENTIONED` were
  * caused by the product rather than by us.
  */
-export type CompanySource = "SEED" | "SELF_ADDED" | "MENTIONED" | "ADMIN";
+export type CompanySource =
+  | "SEED"
+  | "LAUNCHLLAMA"
+  | "SELF_ADDED"
+  | "MENTIONED"
+  | "ADMIN";
+
+/**
+ * Sources that mean "we put this here". Generation 0, however it arrived, is
+ * the denominator the flywheel is measured against — only `MENTIONED` proves
+ * the product caused a company to exist on the graph.
+ */
+export const SOURCED_BY_US: CompanySource[] = ["SEED", "LAUNCHLLAMA", "ADMIN"];
 
 /**
  * Every relationship is a company's own statement about its own stack, so

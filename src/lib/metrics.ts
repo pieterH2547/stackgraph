@@ -52,6 +52,7 @@ export interface FlywheelMetrics {
   pendingClaims: number;
   generations: { generation: number; total: number; claimed: number }[];
   deepestClaimedGeneration: number;
+  /** Generation 0 we put there ourselves: seeded, imported or via admin. */
   seedVendors: number;
   incumbentsInGraph: number;
   disputedEdges: number;
@@ -129,7 +130,12 @@ export async function getFlywheelMetrics(): Promise<FlywheelMetrics> {
                        COUNT(*) AS total,
                        SUM(CASE WHEN status = 'CLAIMED' THEN 1 ELSE 0 END) AS claimed
                 FROM companies GROUP BY generation ORDER BY generation ASC`),
-    db.execute(`SELECT COUNT(*) AS n FROM companies WHERE source = 'SEED'`),
+    // Cohort we put there ourselves, whether hand-seeded or imported. It is
+    // the baseline the recursion has to beat, so an import must not quietly
+    // count as growth.
+    db.execute(
+      `SELECT COUNT(*) AS n FROM companies WHERE source IN ('SEED', 'LAUNCHLLAMA', 'ADMIN')`,
+    ),
     db.execute(`SELECT COUNT(*) AS n FROM companies WHERE network_eligible = 0`),
     db.execute(`SELECT COUNT(*) AS n FROM relationships WHERE state = 'DISPUTED'`),
     // Viral cycle time: first invitation out -> claim complete.

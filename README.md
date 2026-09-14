@@ -272,7 +272,8 @@ src/
     metrics.ts             the four-factor K and cycle time
     graph.ts               deterministic graph geometry
   test/                    56 tests over the whole loop
-scripts/                   db:push, db:seed, db:reset, db:inspect
+scripts/                   db:push, db:seed, db:reset, db:inspect,
+                           launchllama:score, launchllama:import
 ```
 
 **Stack**: Next.js 16 (App Router), React 19, TypeScript, Tailwind v4,
@@ -304,6 +305,36 @@ extension, integration marketplace or SEO content engine. No vendor dashboard.
 
 Monetisation is a question for after generation 2, 3 and 4 demonstrably exist
 on their own.
+
+---
+
+## Generation 0
+
+Cold start is a selection problem, not an import problem. `scripts/` holds a
+two-step pipeline that throws most of a directory away:
+
+```bash
+npm run launchllama:score -- --in=data/launchllama.csv --enrich
+npm run launchllama:import -- --limit=100                  # dry run, the default
+npm run launchllama:import -- --write --local --limit=100
+```
+
+The score is 0–6, one point per criterion, and only positive evidence counts:
+software product · small team · active · clear B2B use case · contactable ·
+likely to run on other independent products. Anything it cannot establish
+stays `unknown` rather than being guessed, which is why `--enrich` matters —
+reading each site is what actually answers activity, contactability and stack
+richness. Threshold is 4/6, and `data/launchllama-stackgraph-review.csv` is
+meant to be opened and argued with before anything is written.
+
+The score never reaches a page. It is import logic, not a rating.
+
+Writing is deliberate by construction: dry run is the default, a local write
+still needs `--local`, and a remote one needs `--remote` *and*
+`--confirm-stackgraph-production` *and* a `DATABASE_URL` that really is
+remote. An import creates `UNCLAIMED` profiles and nothing else — no
+relationships, no claims, no email — and never overwrites a field on an
+existing company with a directory's copy of it.
 
 ---
 

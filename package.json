@@ -12,6 +12,8 @@
     "db:seed": "tsx scripts/seed-demo.ts",
     "db:reset": "tsx scripts/db-reset.ts",
     "db:inspect": "tsx scripts/inspect.ts",
+    "launchllama:score": "tsx scripts/score-launchllama.ts",
+    "launchllama:import": "tsx scripts/import-launchllama.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "verify": "npm run typecheck && npm run lint && npm run test && npm run build"
