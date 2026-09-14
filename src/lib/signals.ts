@@ -1,3 +1,4 @@
+import { BOT_USER_AGENT } from "./brand";
 import { assessEligibility } from "./eligibility";
 import { nameFromDomain } from "./url";
 
@@ -101,7 +102,7 @@ async function fetchHtml(url: string): Promise<string | null> {
       redirect: "follow",
       signal: AbortSignal.timeout(TIMEOUT_MS),
       headers: {
-        "user-agent": "StackgraphBot/0.1 (+https://stackgraph.dev)",
+        "user-agent": BOT_USER_AGENT,
         accept: "text/html",
       },
     });

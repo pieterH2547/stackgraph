@@ -326,6 +326,43 @@ on their own.
 
 ---
 
+## Going live
+
+Three things, in this order, and the credentials never leave the places that
+can rotate them.
+
+**1. GitHub.** `main` is the deployable branch. `.github/workflows/` holds
+three jobs: `acceptance.yml` runs the gates on every push, `deploy.yml`
+deploys, and `gen0-import.yml` writes the first cohort. The last two read
+their secrets from a GitHub Environment named `production`:
+
+| Secret | For |
+| --- | --- |
+| `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `deploy.yml` |
+| `DATABASE_URL`, `DATABASE_AUTH_TOKEN` | `gen0-import.yml` |
+
+**2. Turso.** Connect it through Vercel's own Turso integration rather than by
+hand: that provisions the database and injects the environment variables
+server-side, so the auth token is never seen by a person or an agent. There is
+no migration step — the schema applies itself on the first request, and the
+columns added since the first release are separate `ALTER TABLE`s where
+"already exists" is the expected outcome. An empty database is enough.
+
+Without a database the app falls back to `/tmp`, which is per serverless
+instance: two requests can disagree and nothing survives. Fine for a look,
+useless for a test.
+
+**3. The domain.** Apex gets an `A` record and `www` gets a `CNAME`, and both
+values must be copied from that project's own **Settings → Domains** page —
+each project now has its own CNAME target (`<hash>.vercel-dns-0NN.com`), so a
+value from another project or an old tutorial will not verify.
+
+Changing only the site's `A` and `CNAME` at the existing DNS provider leaves
+MX, SPF, DMARC and autodiscover where they are. Moving nameservers to Vercel
+instead means re-creating all of those first, or email stops arriving.
+
+---
+
 ## Generation 0
 
 Cold start is a selection problem, not an import problem. `scripts/` holds a

@@ -1,4 +1,4 @@
-import { CATEGORIES, type Category } from "./brand";
+import { BOT_USER_AGENT, CATEGORIES, type Category } from "./brand";
 import { nameFromDomain, normalizeSiteUrl } from "./url";
 
 /**
@@ -250,7 +250,7 @@ export async function findPublishedContactEmail(
         redirect: "follow",
         signal: AbortSignal.timeout(TIMEOUT_MS),
         headers: {
-          "user-agent": "StackgraphBot/0.1 (+https://stackgraph.dev)",
+          "user-agent": BOT_USER_AGENT,
           accept: "text/html",
         },
       });
@@ -514,7 +514,7 @@ async function fetchAboutPage(website: string): Promise<string> {
         redirect: "follow",
         signal: AbortSignal.timeout(TIMEOUT_MS),
         headers: {
-          "user-agent": "StackgraphBot/0.1 (+https://stackgraph.dev)",
+          "user-agent": BOT_USER_AGENT,
           accept: "text/html,application/xhtml+xml",
         },
       });
@@ -559,7 +559,7 @@ export async function detectSite(input: string): Promise<DetectedSite> {
       signal: AbortSignal.timeout(TIMEOUT_MS),
       headers: {
         // Identify ourselves honestly; we are reading a public page.
-        "user-agent": "StackgraphBot/0.1 (+https://stackgraph.dev)",
+        "user-agent": BOT_USER_AGENT,
         accept: "text/html,application/xhtml+xml",
       },
     });

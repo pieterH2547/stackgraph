@@ -15,7 +15,7 @@
 export const brand = {
   name: "Stackgraph",
   wordmark: "STACKGRAPH",
-  domain: "stackgraph.dev",
+  domain: "whouseswhat.tech",
 
   /** The category this sits in. Not a slogan, not a name. */
   category: "the independent software graph",
@@ -94,3 +94,11 @@ export const CATEGORIES = [
 ] as const;
 
 export type Category = (typeof CATEGORIES)[number];
+
+/**
+ * Sent to every vendor site we read. It points at a domain that resolves on
+ * purpose: a site owner who checks their logs and looks us up should find
+ * something, and four copies of this string in three files was one rename
+ * away from pointing at nothing.
+ */
+export const BOT_USER_AGENT = `WhoUsesWhatBot/0.1 (+https://${brand.domain})`;

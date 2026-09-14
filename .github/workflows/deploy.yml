@@ -1,0 +1,111 @@
+# Deploy, and nowhere else.
+#
+# Same shape as the Generation 0 import: the credentials live in a GitHub
+# Environment where they can be rotated and audited, and nothing outside this
+# job ever holds them. A token pasted into a terminal, a chat or an agent
+# transcript cannot be revoked from there.
+#
+# This replaces nothing about Vercel's own git integration — if the project is
+# connected to the repository, Vercel already builds every push. This exists
+# for the case where it is not connected, or where the gates must pass before
+# anything reaches production.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "preview or production"
+        required: true
+        default: preview
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      # Everything except the production build, which Vercel is about to do
+      # anyway. A broken typecheck or a failing test must not reach a URL.
+      - name: Gates
+        run: npm run verify -- --quick
+
+      - name: Install the Vercel CLI
+        run: npm i -g vercel@latest
+
+      # `production` for a push to main or an explicit dispatch; preview
+      # otherwise, so a dispatch can be used to look at something first.
+      - name: Work out the target
+        id: target
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] || [ "${{ inputs.target }}" = "production" ]; then
+            echo "flag=--prod" >> "$GITHUB_OUTPUT"
+            echo "name=production" >> "$GITHUB_OUTPUT"
+          else
+            echo "flag=" >> "$GITHUB_OUTPUT"
+            echo "name=preview" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Pull the project configuration
+        run: vercel pull --yes --environment=${{ steps.target.outputs.name }} --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Build
+        run: vercel build ${{ steps.target.outputs.flag }} --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Deploy
+        id: deploy
+        run: |
+          url=$(vercel deploy --prebuilt ${{ steps.target.outputs.flag }} --token="$VERCEL_TOKEN")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed to $url"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      # A deployment that 500s is not a deployment. Checks the pages that do
+      # not need a database row to exist.
+      - name: Check it actually answers
+        run: |
+          url="${{ steps.deploy.outputs.url }}"
+          fail=0
+          for path in / /network /add /robots.txt; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$url$path")
+            echo "$path -> $code"
+            [ "$code" = "200" ] || fail=1
+          done
+          if [ "$fail" = "1" ]; then
+            echo "::error::A page did not answer 200. The deployment is live but broken."
+            exit 1
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### ${{ steps.target.outputs.name }} deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.deploy.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"

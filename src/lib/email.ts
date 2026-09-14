@@ -1,3 +1,4 @@
+import { brand } from "./brand";
 export interface OutboundEmail {
   to: string;
   subject: string;
@@ -40,7 +41,7 @@ export async function sendEmail(email: OutboundEmail): Promise<SendResult> {
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        from: process.env.EMAIL_FROM ?? "Stackgraph <hello@stackgraph.dev>",
+        from: process.env.EMAIL_FROM ?? `${brand.name} <hello@${brand.domain}>`,
         to: [email.to],
         subject: email.subject,
         text: email.text,
