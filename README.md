@@ -26,29 +26,55 @@ Everything in the repository exists to serve, or to measure, this loop:
 
 ```
 CLAIM
-  → 2 independent tools that power you   (upstream edges)
-  → 2 software companies you power       (downstream edges)
-  → 4 edges, unclaimed profiles created automatically
+  → name 2 independent tools you genuinely use
+  → 2 outgoing edges
+  → those vendors automatically gain a "Used by" relationship
+  → unclaimed target profiles become acquisition opportunities
   → contact route found from their own public site
   → "Someone actually uses your software."
-  → CLAIM
-  → 4 more edges
+  → target CLAIMS
+  → target names 2 tools
   → …
 ```
 
 If that is recursive, there is something here. If it isn't, no extra feature
 saves it.
 
+### One edge, both jobs
+
+This is the whole design, and everything else follows from it:
+
+> **The source company creates the relationship. The target company receives
+> the proof.**
+
+`Acme uses Tally` is stated once, by the only party entitled to state it, and
+lands on two profiles at the same time:
+
+| | |
+| --- | --- |
+| on **Acme** | Powered by → Tally |
+| on **Tally** | Used by → Acme |
+
+So a vendor never submits a customer list, and never needs to. Its `used by`
+side is assembled entirely out of other companies' statements about their own
+stacks — which is also what makes that side the strong one: everybody listed
+there put the product in their own stack and said so in their own name.
+
 ### The claim gate
 
 A profile turns `CLAIMED` when, and only when:
 
 1. identity is settled (an emailed link, or the founder added the company), **and**
-2. two **independent** tools have been credited (`REQUIRED_UPSTREAM`), **and**
-3. two software companies have been named as users (`REQUIRED_DOWNSTREAM`).
+2. two **network-eligible** tools have been credited (`REQUIRED_UPSTREAM`).
 
-Nobody named has to confirm anything. A claim that depended on other people
-would stall the whole network. Both constants live in `src/lib/limits.ts`.
+That is the entire gate, and it lives in `src/lib/limits.ts`. Nobody named has
+to confirm anything: a claim that depended on other people would stall the
+whole network.
+
+Naming your own customers used to be the other half of this. It was removed
+rather than made optional — it was a vendor's word about somebody else, and
+redundant with what the graph already derives, so it doubled the cost of a
+claim to re-state something nobody needed told.
 
 Large incumbents (Stripe, Vercel, OpenAI, Slack…) may sit in a stack but never
 count towards the two and never trigger the loop:
@@ -73,15 +99,20 @@ So overlap is never wasted, and hubs don't break the flywheel.
 
 ### Trust
 
-Every relationship is **self-reported** and labelled as such:
+Every relationship is **self-reported**, and there is exactly one phrasing for
+all of them:
 
-- `Acme says it uses Tally` — Acme's word
-- `Tally says Acme uses its product` — Tally's word, until Acme confirms it
+> `Acme says it uses Tally`
 
-The named company can answer *Looks right* or *Not accurate*. A disputed edge
-leaves the public graph; the vendor who stated it keeps its claimed status.
-Nothing anywhere claims a "verified customer". No stars, no ratings, no
-rankings.
+There is no second phrasing to explain, because there is no second way to make
+an edge. No confirmation is needed to make that sentence true — the product is
+reporting who said what about their own stack, and attributing it — and
+nothing anywhere claims a "verified customer".
+
+The credited vendor gets one reply: *Not accurate*, which takes the edge out of
+the public graph when it doesn't recognise the company at all. It never
+touches anyone's claimed status; a claim others could revoke would make every
+claim hostage to someone else.
 
 ---
 
@@ -110,7 +141,7 @@ build a schema in a local file instead.
 
 ```bash
 npm run verify           # typecheck + lint + tests + production build
-npm test                 # 48 tests, no network, no mail provider
+npm test                 # 56 tests, no network, no mail provider
 ```
 
 ### Environment
@@ -157,8 +188,8 @@ only affect that one path on the host.
 | `/` | Hero, the global graph, recently connected, the manifesto, growing networks |
 | `/add` | One field: your website. Called *Claim your company*, because half the companies people look for already have a profile waiting — paste a domain that exists and you land on its claim page. |
 | `/add/confirm` | "We found this" — name, one line, for whom, built by, category |
-| `/stack/[slug]` | **The unlock page.** Both halves, with one-click suggestions read from your own site |
-| `/done/[slug]` | ✓ Profile claimed · ✓ See who uses you · ✓ Your network is live |
+| `/stack/[slug]` | **The unlock page.** One task: *Add 2 tools you genuinely use*, with one-click suggestions read from your own site. Every tool you pick states its own consequence — "Tally gets: Used by Acme" — because that consequence is the product. |
+| `/done/[slug]` | ✓ Claimed · ✓ See who uses you · ✓ Your network is live |
 | `/c/[slug]` | The public profile: local graph, Used by, Powered by |
 | `/claim/[slug]` | Curiosity first: *N companies say they use your product, M are on the network* |
 | `/claim/[slug]/verify` | One button, then straight back into the flywheel |
@@ -169,21 +200,23 @@ only affect that one path on the host.
 ### Progressive unlock
 
 An unclaimed profile shows *how many* companies name it and how many are
-already on the network — never *who*. That is the reason to claim, and it
-means we never publish someone else's customer list on their behalf.
+already on the network — never *who*. That is the reason to claim.
 
 ### Prefilled contribution
 
-`src/lib/signals.ts` reads the vendor's own public site to suggest both halves:
+`src/lib/signals.ts` reads the vendor's own public site and suggests the
+third-party hosts its pages actually load from — a form embed, an analytics
+script, a chat widget. It arrives as a question, never as a fact:
 
-- **Powered by** — third-party hosts the page actually loads from (a form
-  embed, an analytics script, a chat widget). Strong signal: the tool is
-  literally running on their site.
-- **Used by** — companies linked inside a "trusted by" or testimonial block.
-  Weaker, which is why it arrives as a question, never as a fact.
+> We spotted these on acme.dev. Use any of them?
 
-The goal is `confirm → confirm → done` rather than typing four things, because
-cycle time is a headline metric.
+Nothing is added without a click. A correct stack is worth more than a long
+one, so suggestions are a shortcut for the vendor and never a shortcut for us.
+
+Incumbent rules are not explained up front. Add Stripe and it stays in your
+stack, labelled where you can see it:
+
+> Part of your stack · doesn't count toward the 2 independent tools
 
 ---
 
@@ -199,6 +232,9 @@ K = edges per claimed vendor
 ```
 
 `3.5 × 0.8 × 0.5 × 0.8 ≈ 1.12` grows. `3 × 0.6 × 0.25 × 0.7 ≈ 0.32` dies.
+
+Only acquisition and proof edges count in the numerator: an incumbent sits in
+the graph and stays out of the maths.
 
 **Contactability is a first-class metric**: an unclaimed vendor with no
 contact route stays in the graph but is not an acquisition opportunity, and
@@ -227,15 +263,15 @@ src/
     db/client.ts           one libSQL client, lazy schema
     db/queries.ts          typed SQL, no ORM
     network.ts             the flywheel: addCompany, submitStack,
-                           submitCustomers, settleClaim, classifyEdge
+                           settleClaim, classifyEdge
     limits.ts              the claim price, in one place
     eligibility.ts         networkEligible — incumbent denylist
     detect.ts              read a public site for name/description/logo/contact
-    signals.ts             suggestions for both halves of a claim
+    signals.ts             one-click suggestions read from the vendor's site
     notify.ts              recognition emails, dedupe and cooldown
     metrics.ts             the four-factor K and cycle time
     graph.ts               deterministic graph geometry
-  test/                    48 tests over the whole loop
+  test/                    56 tests over the whole loop
 scripts/                   db:push, db:seed, db:reset, db:inspect
 ```
 
@@ -248,9 +284,9 @@ email SDK — one dependency beyond the framework.
 - **companies** — identity (name, one line, category, for whom, built by),
   `status`, `networkEligible`, `source`, `generation`, contact route, claim
   state, `updated_at`
-- **relationships** — `source uses target`, plus `reported_by_company_id`,
-  `state` (self-reported / confirmed / disputed) and `edge_kind`; unique per
-  pair
+- **relationships** — `source uses target`, plus `reported_by_company_id`
+  (always the source, stored rather than assumed), `state` (self-reported /
+  disputed) and `edge_kind`; unique per pair
 - **claims** — one row per claim attempt, with domain-match flag
 - **notifications** — every invitation, sent or queued, with the mention count
   at the time

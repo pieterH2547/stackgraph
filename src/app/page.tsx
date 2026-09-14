@@ -121,7 +121,7 @@ export default async function HomePage() {
               Someone is already running on your software.
             </h2>
             <p className="mono mt-3 text-ink-3">
-              One field to start · two tools · two customers · no vendor form
+              {brand.claimPrice}
             </p>
           </div>
           <Link href="/add" className="btn btn-primary shrink-0">

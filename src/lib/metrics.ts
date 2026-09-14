@@ -1,6 +1,6 @@
 import { getDb } from "./db/client";
 import { countEvents, type EventName } from "./events";
-import { REQUIRED_DOWNSTREAM, REQUIRED_UPSTREAM } from "./limits";
+import { REQUIRED_UPSTREAM } from "./limits";
 
 /**
  * This MVP exists to answer one question: does one vendor cause another vendor
@@ -57,7 +57,6 @@ export interface FlywheelMetrics {
   disputedEdges: number;
   events: Record<EventName, number>;
   requiredUpstream: number;
-  requiredDownstream: number;
 }
 
 function ratio(numerator: number, denominator: number): number {
@@ -227,6 +226,5 @@ export async function getFlywheelMetrics(): Promise<FlywheelMetrics> {
     disputedEdges: Number(disputed.rows[0]?.n ?? 0),
     events: await countEvents(),
     requiredUpstream: REQUIRED_UPSTREAM,
-    requiredDownstream: REQUIRED_DOWNSTREAM,
   };
 }

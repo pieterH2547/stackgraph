@@ -9,7 +9,6 @@ import {
   verifyIdentity,
 } from "./helpers";
 import {
-  countDownstreamCredits,
   countIncomingOnNetwork,
   countUpstreamCredits,
   getCompanyByDomain,
@@ -26,13 +25,12 @@ import {
   getProfile,
   settleClaim,
   StackValidationError,
-  submitCustomers,
   submitStack,
 } from "@/lib/network";
 import { assessEligibility } from "@/lib/eligibility";
 import { composeMentionEmail, notifyMention } from "@/lib/notify";
 import { getFlywheelMetrics } from "@/lib/metrics";
-import { REQUIRED_DOWNSTREAM, REQUIRED_UPSTREAM } from "@/lib/limits";
+import { REQUIRED_UPSTREAM } from "@/lib/limits";
 import { postClaimDestination, routes } from "@/lib/routes";
 import { stackShareText } from "@/lib/share";
 import { reportedBySource } from "@/lib/types";
@@ -68,8 +66,8 @@ describe("a company can be created from a website URL", () => {
   });
 });
 
-/* 2 ----------------------------------------------------------------------- */
-describe("the claim gate: both sides of the company", () => {
+/* 1-4 -------------------------------------------------------------------- */
+describe("the claim gate: identity plus two independent tools", () => {
   it("stays unclaimed on identity alone", async () => {
     const acme = await joinedCompany("acme.dev", "Acme");
     expect(acme.claimVerifiedAt).not.toBeNull();
@@ -78,12 +76,26 @@ describe("the claim gate: both sides of the company", () => {
     const progress = await getClaimProgress(acme);
     expect(progress.identityVerified).toBe(true);
     expect(progress.complete).toBe(false);
+    expect(progress.upstream).toBe(0);
     expect(progress.upstreamShort).toBe(REQUIRED_UPSTREAM);
-    expect(progress.downstreamShort).toBe(REQUIRED_DOWNSTREAM);
   });
 
-  it("stays unclaimed with only the upstream half", async () => {
+  it("stays unclaimed one eligible tool short", async () => {
     const acme = await joinedCompany("acme.dev", "Acme");
+    const result = await submitStack({
+      companyId: acme.id,
+      tools: [{ website: "tally.so", name: "Tally" }],
+    });
+
+    expect(result.progress.upstream).toBe(1);
+    expect(result.progress.upstreamShort).toBe(1);
+    expect(result.claimCompleted).toBe(false);
+    expect(result.company.status).toBe("UNCLAIMED");
+  });
+
+  it("claims on two eligible tools, and nobody named has to confirm", async () => {
+    const acme = await joinedCompany("acme.dev", "Acme");
+
     const result = await submitStack({
       companyId: acme.id,
       tools: [
@@ -93,12 +105,44 @@ describe("the claim gate: both sides of the company", () => {
     });
 
     expect(result.progress.upstream).toBe(2);
-    expect(result.progress.downstream).toBe(0);
-    expect(result.claimCompleted).toBe(false);
-    expect(result.company.status).toBe("UNCLAIMED");
+    expect(result.claimCompleted).toBe(true);
+    expect(result.company.status).toBe("CLAIMED");
+    expect(result.company.claimedAt).not.toBeNull();
+
+    // Both tools named are still unclaimed: their confirmation was never part
+    // of this, and a claim that waited on other people would stall.
+    for (const domain of ["tally.so", "plausible.io"]) {
+      expect((await getCompanyByDomain(domain))!.status).toBe("UNCLAIMED");
+    }
   });
 
-  it("completes the claim on 2 + 2, and nobody named has to confirm", async () => {
+  it("does not count incumbents towards the two, but keeps them in the stack", async () => {
+    const acme = await joinedCompany("acme.dev", "Acme");
+
+    const result = await submitStack({
+      companyId: acme.id,
+      tools: [
+        { website: "stripe.com", name: "Stripe" },
+        { website: "vercel.com", name: "Vercel" },
+        { website: "tally.so", name: "Tally" },
+      ],
+    });
+
+    // Three edges exist and all three are visible, but only Tally is currency.
+    expect(result.connections).toHaveLength(3);
+    expect(await listOutgoingEdges(acme.id)).toHaveLength(3);
+    expect(result.progress.upstream).toBe(1);
+    expect(result.company.status).toBe("UNCLAIMED");
+
+    const second = await submitStack({
+      companyId: acme.id,
+      tools: [{ website: "plausible.io", name: "Plausible" }],
+    });
+    expect(second.progress.upstream).toBe(2);
+    expect(second.company.status).toBe("CLAIMED");
+  });
+
+  it("never asks for customers: a claimed company can have named none", async () => {
     const acme = await joinedCompany("acme.dev", "Acme");
     await submitStack({
       companyId: acme.id,
@@ -108,28 +152,10 @@ describe("the claim gate: both sides of the company", () => {
       ],
     });
 
-    const result = await submitCustomers({
-      companyId: acme.id,
-      customers: [
-        { website: "northwind.dev", name: "Northwind" },
-        { website: "kettle.app", name: "Kettle" },
-      ],
-    });
-
-    expect(result.claimCompleted).toBe(true);
-    expect(result.company.status).toBe("CLAIMED");
-    expect(result.company.claimedAt).not.toBeNull();
-
-    // The four companies named are all still unclaimed — their confirmation
-    // was never required.
-    for (const domain of [
-      "tally.so",
-      "plausible.io",
-      "northwind.dev",
-      "kettle.app",
-    ]) {
-      expect((await getCompanyByDomain(domain))!.status).toBe("UNCLAIMED");
-    }
+    const claimed = (await getCompanyByDomain("acme.dev"))!;
+    expect(claimed.status).toBe("CLAIMED");
+    // Nothing points at Acme, and that was never required of it.
+    expect(await listIncomingEdges(acme.id)).toHaveLength(0);
   });
 
   it("refuses nothing, and caps a single submission", async () => {
@@ -231,7 +257,6 @@ describe("an unknown vendor gets an unclaimed profile that claims nothing", () =
       mentionedBy: acme,
       mentionCount: 1,
       claimUrl: absoluteUrl(routes.claim(loops.slug)),
-      kind: "USES_YOU",
     });
 
     expect(subject).toBe("Someone actually uses your software");
@@ -369,14 +394,14 @@ describe("every edge does something: acquisition or proof", () => {
   });
 });
 
-/* 9 + 10 ------------------------------------------------------------------ */
+/* 9-10 -------------------------------------------------------------------- */
 describe("a mentioned vendor can claim and start the next generation", () => {
   it("sends a verified vendor straight back into the flywheel", () => {
     expect(postClaimDestination("tally")).toBe("/stack/tally?after=claim");
     expect(postClaimDestination("tally")).toContain(routes.stack("tally"));
   });
 
-  it("claims on 2 + 2 and creates a third generation", async () => {
+  it("claims on two tools and creates a third generation", async () => {
     const acme = await joinedCompany("acme.dev", "Acme");
     await submitStack({
       companyId: acme.id,
@@ -390,18 +415,11 @@ describe("a mentioned vendor can claim and start the next generation", () => {
     const tally = await verifyIdentity(mentioned);
     expect(tally.status).toBe("UNCLAIMED");
 
-    await submitStack({
+    const finished = await submitStack({
       companyId: tally.id,
       tools: [
         { website: "posthog.com", name: "PostHog" },
         { website: "resend.com", name: "Resend" },
-      ],
-    });
-    const finished = await submitCustomers({
-      companyId: tally.id,
-      customers: [
-        { existingCompanyId: acme.id },
-        { website: "kettle.app", name: "Kettle" },
       ],
     });
 
@@ -409,9 +427,9 @@ describe("a mentioned vendor can claim and start the next generation", () => {
     expect(finished.company.status).toBe("CLAIMED");
 
     const posthog = (await getCompanyByDomain("posthog.com"))!;
-    const kettle = (await getCompanyByDomain("kettle.app"))!;
+    const resend = (await getCompanyByDomain("resend.com"))!;
     expect(posthog.generation).toBe(2);
-    expect(kettle.generation).toBe(2);
+    expect(resend.generation).toBe(2);
     expect(posthog.status).toBe("UNCLAIMED");
 
     // And they were invited, which is what keeps the loop turning. With no
@@ -482,17 +500,19 @@ describe("claim notifications dedupe", () => {
     expect(result.outcome).toBe("SKIPPED_ALREADY_CLAIMED");
   });
 
-  it("writes to a named customer with the other trigger", async () => {
-    const tally = await joinedCompany("tally.so", "Tally");
-    await submitCustomers({
-      companyId: tally.id,
-      customers: [{ website: "acme.dev", name: "Acme" }],
+  it("has exactly one trigger: somebody put your product in their stack", async () => {
+    const acme = await joinedCompany("acme.dev", "Acme");
+    await submitStack({
+      companyId: acme.id,
+      tools: [{ website: "tally.so", name: "Tally" }],
     });
 
-    const acme = (await getCompanyByDomain("acme.dev"))!;
-    const notification = (await notificationsFor(acme.id))[0];
-    expect(notification.subject).toBe("Tally says you use their product");
-    expect(notification.body).toContain("confirm or correct");
+    const tally = (await getCompanyByDomain("tally.so"))!;
+    const notification = (await notificationsFor(tally.id))[0];
+    expect(notification.subject).toBe("Someone actually uses your software");
+    expect(notification.body).toContain("Acme says Tally helps power");
+    // Nothing is ever sent about a customer list, because none is collected.
+    expect(notification.body).not.toContain("uses their product");
   });
 });
 
@@ -526,68 +546,73 @@ describe("there is one kind of edge", () => {
   });
 });
 
-/* 14 --------------------------------------------------------------------- */
-describe("a profile shows both sides, and says whose word each is", () => {
-  it("separates powered-by from used-by and attributes both", async () => {
+/* 5-7 -------------------------------------------------------------------- */
+describe("one edge, two profiles: the source states it, the target gains it", () => {
+  it("puts A in B's used-by and B in A's powered-by from a single statement", async () => {
     const acme = await joinedCompany("acme.dev", "Acme");
     await submitStack({
       companyId: acme.id,
       tools: [{ website: "tally.so", name: "Tally" }],
     });
 
-    const tally = await verifyIdentity(
-      (await getCompanyByDomain("tally.so"))!,
-    );
+    const tally = (await getCompanyByDomain("tally.so"))!;
+
+    // A's own side.
+    const acmeProfile = await getProfile(acme);
+    expect(acmeProfile.outgoing.map((e) => e.target.domain)).toEqual([
+      "tally.so",
+    ]);
+    expect(acmeProfile.incoming).toHaveLength(0);
+
+    // B's side, which B never wrote.
+    const tallyProfile = await getProfile(tally);
+    expect(tallyProfile.incoming.map((e) => e.source.domain)).toEqual([
+      "acme.dev",
+    ]);
+    expect(tallyProfile.outgoing).toHaveLength(0);
+  });
+
+  it("attributes every incoming edge to the company that made the statement", async () => {
+    const acme = await joinedCompany("acme.dev", "Acme");
+    const kettle = await joinedCompany("kettle.app", "Kettle");
     await submitStack({
-      companyId: tally.id,
-      tools: [{ website: "resend.com", name: "Resend" }],
+      companyId: acme.id,
+      tools: [{ website: "tally.so", name: "Tally" }],
     });
-    await submitCustomers({
-      companyId: tally.id,
-      customers: [{ website: "kettle.app", name: "Kettle" }],
+    await submitStack({
+      companyId: kettle.id,
+      tools: [{ website: "tally.so", name: "Tally" }],
     });
 
+    const tally = (await getCompanyByDomain("tally.so"))!;
     const profile = await getProfile(tally);
-    expect(profile.outgoing.map((e) => e.target.domain)).toEqual([
-      "resend.com",
-    ]);
     expect(profile.incoming.map((e) => e.source.domain).sort()).toEqual([
       "acme.dev",
       "kettle.app",
     ]);
 
-    // Acme said it itself; Kettle was named by Tally.
-    const fromAcme = profile.incoming.find(
-      (e) => e.source.domain === "acme.dev",
-    )!;
-    const fromTally = profile.incoming.find(
-      (e) => e.source.domain === "kettle.app",
-    )!;
-    expect(reportedBySource(fromAcme)).toBe(true);
-    expect(reportedBySource(fromTally)).toBe(false);
-    expect(fromTally.reportedByCompanyId).toBe(tally.id);
+    // The invariant the public copy rests on: there is only ever one phrasing,
+    // "<source> says it uses <target>", because the source is the only party
+    // that can create an edge at all.
+    for (const edge of profile.incoming) {
+      expect(reportedBySource(edge)).toBe(true);
+      expect(edge.reportedByCompanyId).toBe(edge.source.id);
+      expect(edge.reportedByCompanyId).not.toBe(tally.id);
+    }
 
     expect(await getCompanyBySlug(tally.slug)).not.toBeNull();
   });
 
-  it("counts only the vendor's own claims towards the downstream half", async () => {
-    const tally = await joinedCompany("tally.so", "Tally");
-    const acme = await joinedCompany("acme.dev", "Acme");
+  it("offers no way for a vendor to report a user of its own product", async () => {
+    const network = await import("@/lib/network");
+    const actions = await import("@/actions/stack");
 
-    // Acme saying it uses Tally is proof for Tally, but it is not Tally's
-    // half of the claim — that has to be Tally's own word.
-    await submitStack({
-      companyId: acme.id,
-      tools: [{ existingCompanyId: tally.id }],
-    });
-
-    expect(await countDownstreamCredits(tally.id)).toBe(0);
-
-    await submitCustomers({
-      companyId: tally.id,
-      customers: [{ website: "kettle.app", name: "Kettle" }],
-    });
-    expect(await countDownstreamCredits(tally.id)).toBe(1);
+    // The flow is gone, not hidden: nothing in the domain or the action layer
+    // can write an edge on somebody else's behalf.
+    expect(network).not.toHaveProperty("submitCustomers");
+    expect(actions).not.toHaveProperty("saveCustomers");
+    expect(Object.keys(network).filter((k) => /customer/i.test(k))).toEqual([]);
+    expect(Object.keys(actions).filter((k) => /customer/i.test(k))).toEqual([]);
   });
 });
 
@@ -616,37 +641,32 @@ describe("progressive unlock", () => {
 
 /* 16 --------------------------------------------------------------------- */
 describe("disputes", () => {
-  it("takes a disputed relationship out of the graph without touching a claim", async () => {
-    const tally = await joinedCompany("tally.so", "Tally");
-    await submitCustomers({
-      companyId: tally.id,
-      customers: [
-        { website: "acme.dev", name: "Acme" },
-        { website: "kettle.app", name: "Kettle" },
-      ],
-    });
+  it("lets the credited vendor remove an edge without touching anyone's claim", async () => {
+    // Acme credits Tally. Tally is the only party with anything to object to,
+    // since the statement is Acme's own.
+    const acme = await joinedCompany("acme.dev", "Acme");
     await submitStack({
-      companyId: tally.id,
+      companyId: acme.id,
       tools: [
-        { website: "resend.com", name: "Resend" },
+        { website: "tally.so", name: "Tally" },
         { website: "plausible.io", name: "Plausible" },
       ],
     });
+    expect((await getCompanyByDomain("acme.dev"))!.status).toBe("CLAIMED");
 
-    const claimed = (await getCompanyByDomain("tally.so"))!;
-    expect(claimed.status).toBe("CLAIMED");
-
-    // Acme disputes: the edge leaves the public graph…
-    const acme = (await getCompanyByDomain("acme.dev"))!;
-    const edge = (await listOutgoingEdges(acme.id))[0];
-    expect(edge.target.id).toBe(tally.id);
+    const tally = (await getCompanyByDomain("tally.so"))!;
+    const edge = (await listIncomingEdges(tally.id))[0];
+    expect(edge.source.domain).toBe("acme.dev");
 
     const { deleteRelationship } = await import("@/lib/db/queries");
     await deleteRelationship(edge.id);
 
-    expect(await listOutgoingEdges(acme.id)).toHaveLength(0);
-    // …and Tally is still claimed.
-    expect((await getCompanyByDomain("tally.so"))!.status).toBe("CLAIMED");
+    // The edge is out of the public graph on both sides…
+    expect(await listIncomingEdges(tally.id)).toHaveLength(0);
+    expect(await listOutgoingEdges(acme.id)).toHaveLength(1);
+    // …and Acme keeps the claim it already earned. A claim other people could
+    // revoke would make every claim hostage to someone else.
+    expect((await getCompanyByDomain("acme.dev"))!.status).toBe("CLAIMED");
   });
 });
 
@@ -704,20 +724,14 @@ describe("the effective K-factor", () => {
         { website: "stripe.com", name: "Stripe" },
       ],
     });
-    await submitCustomers({
-      companyId: acme.id,
-      customers: [
-        { website: "northwind.dev", name: "Northwind" },
-        { website: "kettle.app", name: "Kettle" },
-      ],
-    });
-
     const m = await getFlywheelMetrics();
 
-    // Acme is claimed and has five edges, four of which do something.
+    // Acme is claimed and has three edges. Only two of them do a job, and the
+    // K numerator counts jobs, not rows — Stripe is in the graph, out of the
+    // maths.
     expect(m.claimedVendors).toBe(1);
-    expect(m.edgesPerClaimedVendor).toBe(4);
-    expect(m.edges.acquisition).toBe(4);
+    expect(m.edgesPerClaimedVendor).toBe(2);
+    expect(m.edges.acquisition).toBe(2);
     expect(m.edges.stackOnly).toBe(1);
 
     // Nobody was reachable, so nothing propagates however good the graph looks.
@@ -728,17 +742,12 @@ describe("the effective K-factor", () => {
   it("reports a healthy K when vendors are reachable and do claim", async () => {
     const acme = await joinedCompany("acme.dev", "Acme");
 
-    // Two reachable independent vendors, named by Acme.
+    // Four reachable independent vendors, all credited by Acme.
     await submitStack({
       companyId: acme.id,
       tools: [
         { website: "tally.so", name: "Tally" },
         { website: "loops.so", name: "Loops" },
-      ],
-    });
-    await submitCustomers({
-      companyId: acme.id,
-      customers: [
         { website: "northwind.dev", name: "Northwind" },
         { website: "kettle.app", name: "Kettle" },
       ],
@@ -755,7 +764,7 @@ describe("the effective K-factor", () => {
       });
     }
 
-    // All four verify and finish both halves.
+    // All four verify and contribute their own stacks.
     for (const domain of ["tally.so", "loops.so", "northwind.dev", "kettle.app"]) {
       const vendor = await verifyIdentity(
         (await getCompanyByDomain(domain))!,
@@ -765,11 +774,6 @@ describe("the effective K-factor", () => {
         tools: [
           { website: `a-${domain}`, name: "A" },
           { website: `b-${domain}`, name: "B" },
-        ],
-      });
-      await submitCustomers({
-        companyId: vendor.id,
-        customers: [
           { website: `c-${domain}`, name: "C" },
           { website: `d-${domain}`, name: "D" },
         ],
@@ -806,14 +810,6 @@ describe("settleClaim is idempotent", () => {
         { website: "loops.so", name: "Loops" },
       ],
     });
-    await submitCustomers({
-      companyId: acme.id,
-      customers: [
-        { website: "northwind.dev", name: "Northwind" },
-        { website: "kettle.app", name: "Kettle" },
-      ],
-    });
-
     const claimed = (await getCompanyByDomain("acme.dev"))!;
     const first = claimed.claimedAt;
 

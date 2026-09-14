@@ -7,10 +7,17 @@ export type CompanyStatus = "UNCLAIMED" | "CLAIMED";
  */
 export type CompanySource = "SEED" | "SELF_ADDED" | "MENTIONED" | "ADMIN";
 
-export type RelationshipType = "USES" | "RECOMMENDS";
-
-/** Relationships are self-reported until the other end says otherwise. */
-export type RelationshipState = "SELF_REPORTED" | "CONFIRMED" | "DISPUTED";
+/**
+ * Every relationship is a company's own statement about its own stack, so
+ * SELF_REPORTED is what a true edge looks like and there is nothing for a
+ * second party to add: CONFIRMED is gone, because it only ever modelled two
+ * ends agreeing about a fact each of them had asserted separately.
+ *
+ * DISPUTED stays, and it is the one accuracy valve left: a vendor who is
+ * credited by a company that does not actually use its product can have that
+ * edge taken out of the public graph. Nobody's claimed status depends on it.
+ */
+export type RelationshipState = "SELF_REPORTED" | "DISPUTED";
 
 /**
  * What a new edge did for the network. Every edge does one of the first two;
@@ -80,7 +87,11 @@ export interface RelationshipEdge {
   target: Company;
 }
 
-/** "Acme says it uses Tally" vs "Tally says Acme uses its product". */
+/**
+ * Every public edge now reads "Acme says it uses Tally", because the source is
+ * the only party that can create one. Attribution is still stored rather than
+ * assumed, and this is the invariant the tests hold it to.
+ */
 export function reportedBySource(edge: RelationshipEdge): boolean {
   return (
     edge.reportedByCompanyId === null ||

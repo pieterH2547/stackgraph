@@ -58,15 +58,15 @@ export const brand = {
   },
 
   noQuestionnaire:
-    "No 47-field vendor questionnaire. No analyst essay. Just what you build, what powers you, and who you power.",
+    "No 47-field vendor questionnaire. No analyst essay. Just what you build and the tools you run on.",
+
+  /** What the whole contribution costs, said in one line. */
+  claimPrice: "One field to start · 2 independent tools · no vendor questionnaire",
 
   /* --- the claim ------------------------------------------------------- */
-  stackPrompt: "Which independent tools help power your company?",
+  stackPrompt: "Add 2 tools you genuinely use.",
   stackPromptSupport:
-    "Two you genuinely use. Half of what a claim costs, and half of the whole form.",
-  customersPrompt: "Which software companies use your product?",
-  customersPromptSupport:
-    "Two of them. Shown as your word until they confirm it — and their confirmation is never needed for your claim.",
+    "They’ll appear on your stack. Your company will appear in their “Used by”.",
 
   footerLine: "The independent software graph.",
   footerAside:

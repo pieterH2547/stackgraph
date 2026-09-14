@@ -1,6 +1,5 @@
 import { detectSite, findPublishedContactEmail, isDerivedName } from "./detect";
 import {
-  countDownstreamCredits,
   countIncoming,
   countUpstreamCredits,
   createCompany,
@@ -10,28 +9,17 @@ import {
   listIncomingEdges,
   listOutgoingEdges,
   markCompanyClaimed,
-  setRelationshipState,
   touchCompanies,
   updateCompany,
   upsertRelationship,
 } from "./db/queries";
 import { track } from "./events";
-import {
-  MAX_CUSTOMERS,
-  MAX_TOOLS,
-  REQUIRED_DOWNSTREAM,
-  REQUIRED_UPSTREAM,
-} from "./limits";
+import { MAX_TOOLS, REQUIRED_UPSTREAM } from "./limits";
 import { notifyMention } from "./notify";
 import { normalizeSiteUrl } from "./url";
 import type { Company, CompanySource, EdgeKind } from "./types";
 
-export {
-  MAX_CUSTOMERS,
-  MAX_TOOLS,
-  REQUIRED_DOWNSTREAM,
-  REQUIRED_UPSTREAM,
-} from "./limits";
+export { MAX_TOOLS, REQUIRED_UPSTREAM } from "./limits";
 
 export class StackValidationError extends Error {}
 
@@ -163,10 +151,9 @@ export interface StackResult {
 }
 
 export interface ClaimProgress {
+  /** Network-eligible tools credited. The only thing the gate counts. */
   upstream: number;
-  downstream: number;
   upstreamShort: number;
-  downstreamShort: number;
   identityVerified: boolean;
   complete: boolean;
 }
@@ -310,31 +297,28 @@ export async function submitStack(
   return { company: refreshed, connections, errors, progress, claimCompleted };
 }
 
-/** Where a company stands against the two halves of the claim. */
+/**
+ * Where a company stands against the claim gate. One number: how many
+ * network-eligible tools it has credited. Nothing here depends on anyone else
+ * having acted.
+ */
 export async function getClaimProgress(
   company: Company,
 ): Promise<ClaimProgress> {
-  const [upstream, downstream] = await Promise.all([
-    countUpstreamCredits(company.id),
-    countDownstreamCredits(company.id),
-  ]);
+  const upstream = await countUpstreamCredits(company.id);
 
   return {
     upstream,
-    downstream,
     upstreamShort: Math.max(0, REQUIRED_UPSTREAM - upstream),
-    downstreamShort: Math.max(0, REQUIRED_DOWNSTREAM - downstream),
     identityVerified: company.claimVerifiedAt !== null,
-    complete:
-      upstream >= REQUIRED_UPSTREAM && downstream >= REQUIRED_DOWNSTREAM,
+    complete: upstream >= REQUIRED_UPSTREAM,
   };
 }
 
 /**
- * The claim gate: identity, plus both sides of the company. Two independent
- * tools that power you and two software companies you power. Nobody named has
- * to confirm anything — a claim that depended on other people would stall the
- * whole network.
+ * The claim gate: identity, plus two independent tools that power you.
+ * Nobody named has to confirm anything — a claim that depended on other people
+ * would stall the whole network.
  */
 export async function settleClaim(
   company: Company,
@@ -353,176 +337,12 @@ export async function settleClaim(
     companyId: company.id,
     props: {
       upstream: progress.upstream,
-      downstream: progress.downstream,
       generation: company.generation,
       source: company.source,
     },
   });
 
   return { progress, claimCompleted: true };
-}
-
-/* -------------------------------------------------------------------------- */
-/* the turbo: used by                                                         */
-/* -------------------------------------------------------------------------- */
-
-export interface CustomerInput {
-  existingCompanyId?: string;
-  name?: string;
-  website?: string;
-}
-
-export interface CustomerResult {
-  company: Company;
-  connections: StackConnection[];
-  errors: string[];
-  progress: ClaimProgress;
-  claimCompleted: boolean;
-}
-
-/**
- * A vendor naming software companies that use its product. Always optional and
- * never part of the claim: the edges point the other way and are clearly
- * attributed to the vendor who stated them ("Tally says Acme uses its
- * product") until the named company says otherwise.
- */
-export async function submitCustomers(
-  input: { companyId: string; customers: CustomerInput[] },
-  options: { defer?: Defer } = {},
-): Promise<CustomerResult> {
-  const company = await getCompanyById(input.companyId);
-  if (!company) throw new StackValidationError("That company doesn't exist.");
-
-  const customers = input.customers.filter(
-    (entry) => entry.existingCompanyId || entry.website || entry.name,
-  );
-  if (customers.length === 0) {
-    throw new StackValidationError("Name at least one company.");
-  }
-  if (customers.length > MAX_CUSTOMERS) {
-    throw new StackValidationError(
-      `${MAX_CUSTOMERS} companies at a time is the most.`,
-    );
-  }
-
-  const inlineTasks: Promise<void>[] = [];
-  const defer = options.defer ?? inlineDefer(inlineTasks);
-
-  const connections: StackConnection[] = [];
-  const errors: string[] = [];
-  const seen = new Set<string>();
-
-  for (const entry of customers) {
-    let customer: Company | null = null;
-    let createdProfile = false;
-
-    if (entry.existingCompanyId) {
-      customer = await getCompanyById(entry.existingCompanyId);
-      if (!customer) {
-        errors.push("One of the selected companies no longer exists.");
-        continue;
-      }
-    } else if (entry.website) {
-      let normalized;
-      try {
-        normalized = normalizeSiteUrl(entry.website);
-      } catch {
-        errors.push(`"${entry.website}" isn't a website address we can use.`);
-        continue;
-      }
-      const existing = await getCompanyByDomain(normalized.domain);
-      if (existing) {
-        customer = existing;
-      } else {
-        customer = await createProfileFor({
-          name: entry.name,
-          domain: normalized.domain,
-          website: normalized.website,
-          mentionedBy: company,
-        });
-        createdProfile = true;
-      }
-    } else {
-      errors.push(`We need a website for "${entry.name}".`);
-      continue;
-    }
-
-    if (customer.id === company.id) {
-      errors.push("A company can't list itself as its own customer.");
-      continue;
-    }
-    if (seen.has(customer.id)) continue;
-    seen.add(customer.id);
-
-    const edgeKind = classifyEdge(customer);
-    const { outcome, relationship } = await upsertRelationship({
-      // The customer is the one doing the using, whoever said so.
-      sourceCompanyId: customer.id,
-      targetCompanyId: company.id,
-      reportedByCompanyId: company.id,
-      edgeKind,
-    });
-
-    const createdRelationship = outcome === "CREATED";
-
-    // The customer had already said it themselves. Both ends now agree, which
-    // is the strongest version of the same fact.
-    if (
-      !createdRelationship &&
-      relationship &&
-      relationship.reportedByCompanyId === customer.id &&
-      relationship.state !== "CONFIRMED"
-    ) {
-      await setRelationshipState(relationship.id, "CONFIRMED");
-      await touchCompanies([customer.id, company.id]);
-    }
-
-    if (createdRelationship) {
-      await touchCompanies([customer.id, company.id]);
-      await track("relationship_created", {
-        companyId: customer.id,
-        targetCompanyId: company.id,
-        props: { edgeKind, direction: "USED_BY" },
-      });
-
-      const customerId = customer.id;
-      const isNewProfile = createdProfile;
-      defer(async () => {
-        if (isNewProfile) await enrichCompany(customerId);
-        await notifyMention({
-          vendorId: customerId,
-          mentionedById: company.id,
-          kind: "YOU_USE",
-        });
-      });
-    }
-
-    connections.push({
-      company: customer,
-      createdProfile,
-      createdRelationship,
-      edgeKind,
-      countsAsCredit: true,
-    });
-  }
-
-  if (connections.length === 0 && errors.length > 0) {
-    throw new StackValidationError(errors[0]);
-  }
-
-  if (connections.length > 0) {
-    await track("customers_named", {
-      companyId: company.id,
-      props: { count: connections.length },
-    });
-  }
-
-  const { progress, claimCompleted } = await settleClaim(company);
-
-  await Promise.all(inlineTasks);
-
-  const refreshed = (await getCompanyById(company.id)) ?? company;
-  return { company: refreshed, connections, errors, progress, claimCompleted };
 }
 
 /* -------------------------------------------------------------------------- */

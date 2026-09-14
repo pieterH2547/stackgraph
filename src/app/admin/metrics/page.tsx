@@ -99,7 +99,7 @@ export default async function MetricsPage() {
         <Metric
           label="Claim → contribution"
           value={percent(m.claimToContributionRate, 0)}
-          note={`${m.funnel.claimsCompleted} of ${m.funnel.claimsVerified} verified vendors finished ${m.requiredUpstream}+${m.requiredDownstream}`}
+          note={`${m.funnel.claimsCompleted} of ${m.funnel.claimsVerified} verified vendors credited ${m.requiredUpstream} independent tools`}
         />
       </div>
 

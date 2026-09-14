@@ -12,7 +12,7 @@ import {
   getCompanyBySlug,
 } from "@/lib/db/queries";
 import { track } from "@/lib/events";
-import { REQUIRED_DOWNSTREAM, REQUIRED_UPSTREAM } from "@/lib/limits";
+import { REQUIRED_UPSTREAM } from "@/lib/limits";
 import { companiesSay, padCount } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +25,7 @@ export const metadata: Metadata = {
 /**
  * Curiosity first, contribution second. The vendor sees that something about
  * them already exists and how much of it there is — but not who — and unlocks
- * the rest by showing both sides of their own company.
+ * the rest by naming the independent tools that power them.
  */
 export default async function ClaimPage({
   params,
@@ -114,8 +114,9 @@ export default async function ClaimPage({
             </div>
           ) : (
             <p className="mt-5 max-w-lg text-lg leading-relaxed text-ink-2">
-              This profile is waiting for you. Claim it to show what powers your
-              company and who you power.
+              This profile is waiting for {company.name}. Claim it to show the
+              independent tools you run on — and to see who shows up on the
+              other side.
             </p>
           )}
 
@@ -133,13 +134,13 @@ export default async function ClaimPage({
             </Step>
             <Step n="2" title={`What powers you? ${REQUIRED_UPSTREAM}`}>
               Independent tools you genuinely use. We suggest them from your own
-              site — usually a click each.
-            </Step>
-            <Step n="3" title={`Who do you power? ${REQUIRED_DOWNSTREAM}`}>
-              Software companies using your product. Shown as your word until
-              they confirm it.
+              site — usually a click each, and nobody has to confirm anything.
             </Step>
           </ol>
+          <p className="mono mt-4 text-ink-3">
+            That’s the whole gate. Who uses {company.name} fills itself in as
+            other companies credit you.
+          </p>
           <p className="mono mt-6 text-ink-3">
             {brand.noQuestionnaire}
           </p>

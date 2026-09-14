@@ -16,9 +16,9 @@ export const EVENT_NAMES = [
   "stack_started",
   "first_tool_added",
   "relationship_created",
+  "relationship_disputed",
   "stack_completed",
   "claim_completed",
-  "customers_named",
   "share_clicked",
 ] as const;
 

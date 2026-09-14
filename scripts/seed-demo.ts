@@ -7,6 +7,11 @@
  * claims are not, and every row is written with `is_demo = 1` so it can be
  * told apart from anything real.
  *
+ * Note what this no longer does: nobody names their own customers. Every edge
+ * below is a company stating its own stack, and the `used by` side of each
+ * profile is whatever falls out of that — which is exactly how the real
+ * product works.
+ *
  *   npm run db:seed                      # local file database only
  *   ALLOW_DEMO_SEED=1 npm run db:seed    # required for any other database
  *
@@ -16,14 +21,14 @@
 import "./load-env";
 import { ensureSchema, getDb, resolvedDatabaseUrl } from "../src/lib/db/client";
 import { getCompanyByDomain, updateCompany } from "../src/lib/db/queries";
-import { addCompany, submitCustomers, submitStack } from "../src/lib/network";
+import { addCompany, submitStack } from "../src/lib/network";
 import { nowIso } from "../src/lib/ids";
 import type { Company } from "../src/lib/types";
 
 const url = resolvedDatabaseUrl();
 const isLocalFile = url.startsWith("file:");
 
-/** The email step of a claim. The three edges still have to be earned. */
+/** The email step of a claim. The two credits still have to be earned. */
 async function verify(company: Company, name: string, role: string) {
   const updated = await updateCompany(company.id, {
     claimVerifiedAt: nowIso(),
@@ -72,7 +77,8 @@ async function main() {
   });
   const acme = await verify(created, "Sam Rivera", "Founder");
 
-  // Both halves of the claim. Stripe sits in the stack without counting.
+  // The claim itself: two independent tools. Stripe sits in the stack in
+  // plain sight without counting towards them.
   await submitStack({
     companyId: acme.id,
     tools: [
@@ -81,29 +87,14 @@ async function main() {
       { name: "Stripe", website: "https://stripe.com" },
     ],
   });
-  await submitCustomers({
-    companyId: acme.id,
-    customers: [
-      { name: "Northwind", website: "https://northwind.dev" },
-      { name: "Kettle", website: "https://kettle.app" },
-    ],
-  });
 
-  /* Generation 1: a vendor Acme credited claims, and names its own sides. */
+  /* Generation 1: a vendor Acme credited claims, and names its own stack. */
   const tally = await verify(await need("tally.so"), "Marie Martens", "Co-founder");
   await submitStack({
     companyId: tally.id,
     tools: [
       { name: "PostHog", website: "https://posthog.com" },
       { name: "Resend", website: "https://resend.com" },
-    ],
-  });
-  await submitCustomers({
-    companyId: tally.id,
-    customers: [
-      // Acme already said it uses Tally: both ends now agree.
-      { existingCompanyId: acme.id },
-      { name: "Senja", website: "https://senja.io" },
     ],
   });
 
@@ -117,13 +108,65 @@ async function main() {
       { name: "Cal", website: "https://cal.com" },
     ],
   });
-  await submitCustomers({
-    companyId: resend.id,
-    customers: [
-      { existingCompanyId: tally.id },
-      { name: "Tinybird", website: "https://tinybird.co" },
-    ],
-  });
+
+  /*
+   * Three more companies crediting their own stacks, which is the only way a
+   * `used by` list is ever populated: Acme and Tally end up with users
+   * because these three said so about themselves, not because anyone claimed
+   * a customer.
+   */
+  for (const seed of [
+    {
+      url: "https://northwind.dev",
+      name: "Northwind",
+      description: "Shift planning for independent retailers.",
+      category: "Productivity" as const,
+      person: ["Dana Okafor", "Founder"] as const,
+      stack: [
+        { existingCompanyId: acme.id },
+        { name: "Plausible", website: "https://plausible.io" },
+      ],
+    },
+    {
+      url: "https://kettle.app",
+      name: "Kettle",
+      description: "Invoicing built for one-person studios.",
+      category: "Billing & payments" as const,
+      person: ["Arno Beits", "Co-founder"] as const,
+      stack: [
+        { existingCompanyId: acme.id },
+        { name: "Resend", website: "https://resend.com" },
+      ],
+    },
+    {
+      url: "https://senja.io",
+      name: "Senja",
+      description: "Collect and show testimonials.",
+      category: "Social proof" as const,
+      person: ["Wilson Wilson", "Co-founder"] as const,
+      stack: [
+        { existingCompanyId: tally.id },
+        { name: "Framer", website: "https://framer.com" },
+      ],
+    },
+  ]) {
+    const existing = await getCompanyByDomain(new URL(seed.url).hostname);
+    const company = existing
+      ? existing
+      : (
+          await addCompany({
+            url: seed.url,
+            name: seed.name,
+            description: seed.description,
+            category: seed.category,
+            source: "SEED",
+            status: "UNCLAIMED",
+          })
+        ).company;
+
+    const verified = await verify(company, seed.person[0], seed.person[1]);
+    await submitStack({ companyId: verified.id, tools: seed.stack });
+  }
 
   await markDemo([
     "acme.dev",
@@ -137,6 +180,7 @@ async function main() {
     "senja.io",
     "linear.app",
     "crisp.chat",
+    "framer.com",
     "cal.com",
     "tinybird.co",
   ]);

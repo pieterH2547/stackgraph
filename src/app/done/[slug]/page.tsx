@@ -10,7 +10,7 @@ import {
   listIncomingEdges,
   listOutgoingEdges,
 } from "@/lib/db/queries";
-import { REQUIRED_DOWNSTREAM, REQUIRED_UPSTREAM } from "@/lib/limits";
+import { REQUIRED_UPSTREAM } from "@/lib/limits";
 import { getClaimProgress } from "@/lib/network";
 import { companiesCount } from "@/lib/format";
 import { stackShareText } from "@/lib/share";
@@ -47,25 +47,20 @@ export default async function DonePage({ params }: PageProps<"/done/[slug]">) {
       <h1 className="mt-3 max-w-2xl text-[clamp(2rem,5.5vw,3.5rem)] font-medium leading-[1.02] tracking-[-0.035em]">
         {claimed
           ? `${company.name} is live on the graph.`
-          : "One half to go."}
+          : `${progress.upstreamShort} more and ${company.name} is yours.`}
       </h1>
 
       {claimed ? (
         <ul className="mt-8 space-y-2.5">
-          <Tick>Profile claimed</Tick>
+          <Tick>{company.name} claimed</Tick>
           <Tick>See all {companiesCount(incoming.length)} using you</Tick>
           <Tick>Your network is now live</Tick>
         </ul>
       ) : (
-        <div className="mono mt-8 flex flex-wrap gap-x-8 gap-y-2">
+        <div className="mono mt-8">
           <span>
-            What powers you? {Math.min(progress.upstream, REQUIRED_UPSTREAM)}/
-            {REQUIRED_UPSTREAM}
-          </span>
-          <span>
-            Who do you power?{" "}
-            {Math.min(progress.downstream, REQUIRED_DOWNSTREAM)}/
-            {REQUIRED_DOWNSTREAM}
+            What powers {company.name}?{" "}
+            {Math.min(progress.upstream, REQUIRED_UPSTREAM)}/{REQUIRED_UPSTREAM}
           </span>
         </div>
       )}
@@ -90,7 +85,7 @@ export default async function DonePage({ params }: PageProps<"/done/[slug]">) {
           </Link>
         ) : (
           <Link href={`/stack/${company.slug}`} className="btn btn-primary">
-            Finish the other half
+            Credit {progress.upstreamShort} more
           </Link>
         )}
         <Link href={`/share/${company.slug}`} className="btn btn-secondary">

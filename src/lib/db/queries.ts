@@ -434,28 +434,6 @@ export async function countUpstreamCredits(
   return Number(rows[0]?.n ?? 0);
 }
 
-/**
- * Downstream claim currency: software companies this company says use its
- * product — its own word, which is exactly how the profile labels it.
- *
- * A relationship both ends have stated counts too: if the customer already
- * said it and the vendor says it as well, that is the strongest version of the
- * same fact, not a reason to send the vendor back for another name.
- */
-export async function countDownstreamCredits(
-  companyId: string,
-): Promise<number> {
-  const { rows } = await getDb().execute({
-    sql: `SELECT COUNT(*) AS n
-          FROM relationships r
-          WHERE r.target_company_id = ?
-            AND (r.reported_by_company_id = ? OR r.state = 'CONFIRMED')
-            AND r.state != 'DISPUTED'`,
-    args: [companyId, companyId],
-  });
-  return Number(rows[0]?.n ?? 0);
-}
-
 /** How many of the companies naming this vendor are on the network already. */
 export async function countIncomingOnNetwork(
   companyId: string,

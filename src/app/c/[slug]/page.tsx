@@ -7,14 +7,14 @@ import { LocalGraph } from "@/components/LocalGraph";
 import { RelationshipJudge } from "@/components/RelationshipJudge";
 import { ShareRow } from "@/components/ShareRow";
 import { StatusBadge } from "@/components/StatusBadge";
-import { judgeRelationship, trackShare } from "@/actions/stack";
+import { disputeRelationship, trackShare } from "@/actions/stack";
 import { brand } from "@/lib/brand";
 import { companiesCount, companiesSay, padCount, timeAgo } from "@/lib/format";
 import { countIncomingOnNetwork, getCompanyBySlug } from "@/lib/db/queries";
 import { getProfile } from "@/lib/network";
-import { canEdit, editableAmong } from "@/lib/session";
+import { canEdit } from "@/lib/session";
 import { stackShareText } from "@/lib/share";
-import { reportedBySource, type RelationshipEdge } from "@/lib/types";
+import type { RelationshipEdge } from "@/lib/types";
 import { absoluteUrl } from "@/lib/url";
 
 export const dynamic = "force-dynamic";
@@ -53,12 +53,9 @@ export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
   if (!company) notFound();
 
   const { outgoing, incoming, usedByCount } = await getProfile(company);
-  const [mine, onNetwork, judgeable] = await Promise.all([
+  const [mine, onNetwork] = await Promise.all([
     canEdit(company.id),
     countIncomingOnNetwork(company.id),
-    // A relationship is judged by the company it is *about* — the one said to
-    // be using this product — so that is whose edit rights matter here.
-    editableAmong(incoming.map((edge) => edge.source.id)),
   ]);
 
   // Progressive unlock: an unclaimed vendor sees how many companies name them
@@ -138,7 +135,8 @@ export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
       )}
 
       <div className="mt-14 grid gap-12 lg:grid-cols-2 lg:gap-16">
-        {/* Downstream first: who you power is the proof people come for. */}
+        {/* Used by first: it is the proof people come for, and it is the
+            one side the vendor never wrote itself. */}
         {revealed && incoming.length > 0 && (
           <section>
             <SectionHead
@@ -151,11 +149,15 @@ export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
                   key={edge.id}
                   company={edge.source}
                   note={incomingNote(edge, company.name)}
+                  // Only this vendor can say it doesn't recognise a company
+                  // that credits it; the statement itself is the other side's
+                  // to make.
                   action={
-                    <EdgeVerdict
-                      edge={edge}
-                      canJudge={judgeable.has(edge.source.id)}
-                    />
+                    mine ? (
+                      <RelationshipJudge
+                        dispute={disputeRelationship.bind(null, edge.id)}
+                      />
+                    ) : null
                   }
                 />
               ))}
@@ -224,40 +226,14 @@ export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
   );
 }
 
-/** "Acme says it uses Tally" vs "Tally says Acme uses its product". */
-function incomingNote(edge: RelationshipEdge, vendorName: string): string {
-  if (reportedBySource(edge)) {
-    return `${edge.source.name} says it uses ${vendorName}`;
-  }
-  return `${vendorName} says ${edge.source.name} uses its product`;
-}
-
 /**
- * Where a relationship stands, and — for the company it is about — the
- * two-word reply to it. Bound server actions, so the buttons need no
- * client-side router.
+ * One sentence, for every incoming edge there will ever be: the company on the
+ * left put this product in its own stack, and says so in its own name. There
+ * is no second phrasing to branch on any more, because no vendor can state
+ * anything about somebody else.
  */
-function EdgeVerdict({
-  edge,
-  canJudge,
-}: {
-  edge: RelationshipEdge;
-  canJudge: boolean;
-}) {
-  // Both ends have stated it: the strongest version of the same fact.
-  if (edge.state === "CONFIRMED") {
-    return <span className="mono shrink-0 text-accent-ink">Both confirmed</span>;
-  }
-  // Their own word about themselves needs no judging.
-  if (reportedBySource(edge)) return null;
-  if (!canJudge) return null;
-
-  return (
-    <RelationshipJudge
-      confirm={judgeRelationship.bind(null, edge.id, "CONFIRMED")}
-      dispute={judgeRelationship.bind(null, edge.id, "DISPUTED")}
-    />
-  );
+function incomingNote(edge: RelationshipEdge, vendorName: string): string {
+  return `${edge.source.name} says it uses ${vendorName}`;
 }
 
 /**

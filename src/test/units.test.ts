@@ -151,3 +151,93 @@ describe("formatting", () => {
     expect(initials("Small Stack")).toBe("SS");
   });
 });
+
+/**
+ * Copy is part of the model here, so the two statements the product makes
+ * about itself are asserted rather than trusted: there is one phrasing for a
+ * relationship, and the old two-sided claim language is gone from the source
+ * that renders the pages.
+ */
+describe("the public story matches the model", () => {
+  it("prices a claim at two independent tools and nothing else", async () => {
+    const { REQUIRED_UPSTREAM, ...rest } = await import("@/lib/limits");
+    expect(REQUIRED_UPSTREAM).toBe(2);
+    expect(rest).not.toHaveProperty("REQUIRED_DOWNSTREAM");
+    expect(rest).not.toHaveProperty("MAX_CUSTOMERS");
+  });
+
+  it("says the consequence of a credit in the brand copy", async () => {
+    const { brand } = await import("@/lib/brand");
+    expect(brand.stackPrompt).toBe("Add 2 tools you genuinely use.");
+    expect(brand.stackPromptSupport).toContain("Used by");
+    expect(brand.claimPrice).toContain("2 independent tools");
+    expect(brand).not.toHaveProperty("customersPrompt");
+    expect(brand).not.toHaveProperty("customersPromptSupport");
+  });
+
+  it("leaves no two-sided claim language in the rendered source", async () => {
+    const { readdir, readFile } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+
+    async function walk(dir: string): Promise<string[]> {
+      const entries = await readdir(dir, { withFileTypes: true });
+      const files: string[] = [];
+      for (const entry of entries) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) files.push(...(await walk(path)));
+        else if (/\.tsx?$/.test(entry.name) && !path.includes("/test/")) {
+          files.push(path);
+        }
+      }
+      return files;
+    }
+
+    const stale = [
+      "Who do you power",
+      "who you power",
+      "two customers",
+      "REQUIRED_DOWNSTREAM",
+      "submitCustomers",
+      "saveCustomers",
+      "suggestUsedBy",
+      "says you use their product",
+      "uses its product",
+      "half of what a claim costs",
+      "unlock this half",
+      "Both confirmed",
+    ];
+
+    const offenders: string[] = [];
+    for (const file of await walk("src")) {
+      const text = await readFile(file, "utf8");
+      for (const phrase of stale) {
+        if (text.includes(phrase)) offenders.push(`${file}: ${phrase}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe("suggestions never add anything by themselves", () => {
+  it("returns candidates and writes nothing", async () => {
+    const { suggestPoweredBy } = await import("@/lib/signals");
+    const { countRows } = await import("./helpers");
+
+    // Site reading is disabled in tests, so this is the no-network path: it
+    // still has to be a pure read that touches no table.
+    const edgesBefore = await countRows("relationships");
+    const companiesBefore = await countRows("companies");
+    const suggestions = await suggestPoweredBy(
+      "https://acme.dev",
+      "acme.dev",
+    );
+    expect(Array.isArray(suggestions)).toBe(true);
+    expect(await countRows("relationships")).toBe(edgesBefore);
+    expect(await countRows("companies")).toBe(companiesBefore);
+  });
+
+  it("offers no used-by suggestion surface at all", async () => {
+    const signals = await import("@/lib/signals");
+    expect(signals).not.toHaveProperty("suggestUsedBy");
+  });
+});

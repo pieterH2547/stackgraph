@@ -55,14 +55,16 @@ function titleFromDomain(domain: string): string {
  * pick, done. A tool that isn't in the network yet is added from the same
  * input — the person crediting it never fills in someone else's profile.
  *
- * The counter is the point: each half of a claim costs two, and incumbents
- * visibly don't count towards it.
+ * Every row states its own consequence, because that consequence *is* the
+ * product: crediting a tool puts this company in that tool's `used by`. The
+ * counter is the other half of the point, and incumbents visibly don't move
+ * it.
  */
 export function StackEditor({
   action,
   companyName,
+  companyDomain,
   submitLabel,
-  mode = "tools",
   existingCredits = 0,
   requiredCredits = 0,
   suggestionsFor,
@@ -70,8 +72,9 @@ export function StackEditor({
 }: {
   action: StackAction;
   companyName: string;
+  /** Only used to say where a suggestion came from. */
+  companyDomain?: string;
   submitLabel: string;
-  mode?: "tools" | "customers";
   existingCredits?: number;
   /** 0 means no gate — used for the "anything missing?" editor. */
   requiredCredits?: number;
@@ -96,9 +99,7 @@ export function StackEditor({
 
   const requiresCredits = requiredCredits > 0;
   const full = selected.length >= max;
-  // Both halves of the unlock page render an editor, so the input needs an id
-  // of its own for its label to point at the right field.
-  const inputId = `tool-search-${mode}`;
+  const inputId = "tool-search";
 
   const chosenIds = useMemo(
     () => selected.map((tool) => tool.existingCompanyId).filter(Boolean),
@@ -121,7 +122,7 @@ export function StackEditor({
       try {
         const response = await fetch(
           withBasePath(
-            `/api/suggestions?slug=${encodeURIComponent(suggestionsFor)}&kind=${mode}`,
+            `/api/suggestions?slug=${encodeURIComponent(suggestionsFor)}`,
           ),
           { signal: controller.signal },
         );
@@ -134,7 +135,7 @@ export function StackEditor({
     })();
 
     return () => controller.abort();
-  }, [suggestionsFor, mode]);
+  }, [suggestionsFor]);
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -246,9 +247,7 @@ export function StackEditor({
 
       <div className="relative">
         <label className="label" htmlFor={inputId}>
-          {mode === "tools"
-            ? "Search the network, or paste a URL"
-            : "Search for the company, or paste its URL"}
+          Search the network, or paste a URL
         </label>
         <input
           id={inputId}
@@ -257,11 +256,7 @@ export function StackEditor({
           autoComplete="off"
           className="field"
           placeholder={
-            full
-              ? `${max} at a time is the most`
-              : mode === "tools"
-                ? "e.g. Tally, or tally.so"
-                : "e.g. Acme, or acme.dev"
+            full ? `${max} at a time is the most` : "e.g. Tally, or tally.so"
           }
           value={query}
           disabled={full}
@@ -319,7 +314,7 @@ export function StackEditor({
                       <span className="mono block truncate text-ink-3">
                         {option.hit.domain}
                         {requiresCredits && !option.hit.networkEligible
-                          ? " · doesn’t count"
+                          ? " · doesn’t count toward the two"
                           : ""}
                       </span>
                     </span>
@@ -340,7 +335,7 @@ export function StackEditor({
                       <span className="mono block truncate text-ink-3">
                         {option.typed.domain} ·{" "}
                         {requiresCredits && !option.typed.networkEligible
-                          ? "large tool, doesn’t count"
+                          ? "doesn’t count toward the two"
                           : "new profile"}
                       </span>
                     </span>
@@ -359,9 +354,8 @@ export function StackEditor({
       {openSuggestions.length > 0 && (
         <div className="mt-5">
           <p className="label">
-            {mode === "tools"
-              ? `Found on ${companyName}'s own site — do these power you?`
-              : `Found on ${companyName}'s own site — do these use your product?`}
+            We spotted these on {companyDomain ?? "your site"}. Use any of
+            them?
           </p>
           <div className="flex flex-wrap gap-2">
             {openSuggestions.map((suggestion) => (
@@ -374,8 +368,7 @@ export function StackEditor({
                     name: suggestion.name,
                     domain: suggestion.domain,
                     website: suggestion.website,
-                    countsAsCredit:
-                      mode === "customers" || suggestion.networkEligible,
+                    countsAsCredit: suggestion.networkEligible,
                   })
                 }
                 className="card card-hover flex items-center gap-2 px-2.5 py-1.5 text-sm"
@@ -389,8 +382,8 @@ export function StackEditor({
             ))}
           </div>
           <p className="mono mt-2 text-ink-3">
-            Read from their public site. Add the ones that are right, ignore the
-            rest.
+            A guess from what your pages load. Nothing is added until you click
+            it — a correct stack beats a long one.
           </p>
         </div>
       )}
@@ -409,12 +402,21 @@ export function StackEditor({
                 </span>
                 <span className="mono block truncate text-ink-3">
                   {tool.domain}
-                  {requiresCredits && !tool.countsAsCredit
-                    ? " · stack item, doesn’t count"
-                    : tool.existingCompanyId
-                      ? ""
-                      : " · new profile"}
+                  {tool.existingCompanyId ? "" : " · new profile"}
                 </span>
+                {/*
+                 * The whole flywheel in one line, at the moment the person can
+                 * still see the cause and the effect together.
+                 */}
+                <span className="mono mt-0.5 block truncate text-accent-ink">
+                  {tool.name} gets: {"Used by"} {companyName}
+                </span>
+                {!tool.countsAsCredit && (
+                  <span className="mono mt-0.5 block text-ink-3">
+                    Part of your stack · doesn’t count toward the{" "}
+                    {requiredCredits || 2} independent tools
+                  </span>
+                )}
               </span>
 
 
@@ -443,17 +445,17 @@ export function StackEditor({
         <SubmitButton disabled={blocked} label={submitLabel} />
         <p className="text-sm text-ink-3">
           {requiresCredits && creditsShort > 0
-            ? `${creditsShort} more to unlock this half.`
-            : mode === "customers"
-              ? "Shown as your word until they confirm it."
-              : "Saved to your profile."}
+            ? `${creditsShort} more independent ${
+                creditsShort === 1 ? "tool" : "tools"
+              } and the profile is yours.`
+            : "Saved to your profile."}
         </p>
       </div>
     </form>
   );
 }
 
-/** `0/2` — half the claim price, always visible. */
+/** `Your stack · 0/2 independent tools` — the claim price, always visible. */
 function CreditMeter({
   credits,
   required,
@@ -475,10 +477,11 @@ function CreditMeter({
         ))}
       </span>
       <span className="mono text-ink-3">
+        Your stack ·{" "}
         <span className={done ? "text-accent-ink" : "text-ink"}>
           {Math.min(credits, required)}/{required}
         </span>
-        {done ? " ✓" : ""}
+        {done ? " ✓" : " independent tools"}
       </span>
     </div>
   );

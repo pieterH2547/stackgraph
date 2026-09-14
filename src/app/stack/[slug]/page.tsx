@@ -4,19 +4,10 @@ import { notFound } from "next/navigation";
 import { CompanyInline } from "@/components/CompanyCard";
 import { CompanyLogo } from "@/components/CompanyLogo";
 import { StackEditor } from "@/components/StackEditor";
-import { saveCustomers, saveStack } from "@/actions/stack";
+import { saveStack } from "@/actions/stack";
 import { brand } from "@/lib/brand";
-import {
-  getCompanyBySlug,
-  listIncomingEdges,
-  listOutgoingEdges,
-} from "@/lib/db/queries";
-import {
-  MAX_CUSTOMERS,
-  MAX_TOOLS,
-  REQUIRED_DOWNSTREAM,
-  REQUIRED_UPSTREAM,
-} from "@/lib/limits";
+import { getCompanyBySlug, listOutgoingEdges } from "@/lib/db/queries";
+import { MAX_TOOLS, REQUIRED_UPSTREAM } from "@/lib/limits";
 import { getClaimProgress } from "@/lib/network";
 import { canEdit } from "@/lib/session";
 import type { Company, RelationshipEdge } from "@/lib/types";
@@ -29,9 +20,14 @@ export const metadata: Metadata = {
 };
 
 /**
- * The unlock page. Both sides of the company, two each, and the suggestions
- * are prefilled from the vendor's own site so this is closer to
- * confirm → confirm → done than to filling in a form.
+ * The unlock page. One question — what powers you — with the suggestions
+ * prefilled from the vendor's own site, so this is closer to confirm → done
+ * than to filling in a form.
+ *
+ * Naming your own customers used to be the second half of this page, and it is
+ * gone entirely rather than moved. A company only reports facts about its own
+ * stack; the `used by` side of a profile is assembled from other companies'
+ * statements, so there was never anything here for a vendor to submit.
  */
 export default async function StackPage({
   params,
@@ -51,7 +47,7 @@ export default async function StackPage({
           This isn’t your company to edit.
         </h1>
         <p className="mt-4 max-w-md text-ink-2">
-          If {company.name} is yours, claim the profile and both sides are yours
+          If {company.name} is yours, claim the profile and its stack is yours
           to fill in.
         </p>
         <div className="mt-7 flex flex-wrap gap-3">
@@ -68,16 +64,12 @@ export default async function StackPage({
     );
   }
 
-  const [outgoing, incoming, progress] = await Promise.all([
+  const [outgoing, progress] = await Promise.all([
     listOutgoingEdges(company.id),
-    listIncomingEdges(company.id),
     getClaimProgress(company),
   ]);
 
   const claimed = company.status === "CLAIMED";
-  const namedCustomers = incoming.filter(
-    (edge) => edge.reportedByCompanyId === company.id,
-  );
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-14 sm:px-8 sm:py-20">
@@ -90,105 +82,38 @@ export default async function StackPage({
         <div>
           <h1 className="max-w-2xl text-[clamp(1.75rem,4.5vw,2.75rem)] font-medium leading-[1.05] tracking-[-0.035em]">
             {claimed
-              ? "Anything missing?"
-              : "Show both sides of your company to unlock your profile."}
+              ? `Anything missing from ${company.name}?`
+              : "Add 2 tools you genuinely use."}
           </h1>
           <p className="mono mt-2 text-ink-3">{company.domain}</p>
         </div>
       </div>
 
-      {!claimed && (
-        <div className="mono mt-7 flex flex-wrap gap-x-8 gap-y-2 border-y border-line py-4">
-          <span>
-            What powers you?{" "}
-            <Counter value={progress.upstream} required={REQUIRED_UPSTREAM} />
-          </span>
-          <span>
-            Who do you power?{" "}
-            <Counter
-              value={progress.downstream}
-              required={REQUIRED_DOWNSTREAM}
-            />
-          </span>
-        </div>
-      )}
+      <section className="mt-10 max-w-xl">
+        <p className="text-lg leading-relaxed text-ink-2">
+          {brand.stackPromptSupport}
+        </p>
 
-      <div className="mt-12 grid gap-14 lg:grid-cols-2 lg:gap-16">
-        <section>
-          <h2 className="text-xl font-medium tracking-tight">
-            {brand.stackPrompt}
-          </h2>
-          <p className="mt-2 max-w-md leading-relaxed text-ink-2">
-            {brand.stackPromptSupport}
-          </p>
-          <p className="mono mt-3 max-w-md text-ink-3">
-            Stripe and Vercel can sit in your stack, they just don’t count
-            towards the two. Big tools may appear in the graph; small tools are
-            the graph.
-          </p>
-
-          {outgoing.length > 0 && (
-            <ExistingList
-              label={`Already credited · ${progress.upstream}/${REQUIRED_UPSTREAM} independent`}
-              edges={outgoing}
-              pick={(edge) => edge.target}
-            />
-          )}
-
-          <StackEditor
-            action={saveStack.bind(null, company.slug)}
-            companyName={company.name}
-            mode="tools"
-            max={MAX_TOOLS}
-            existingCredits={progress.upstream}
-            requiredCredits={claimed ? 0 : REQUIRED_UPSTREAM}
-            suggestionsFor={company.slug}
-            submitLabel="Save what powers us"
+        {outgoing.length > 0 && (
+          <ExistingList
+            label={`Already credited · ${progress.upstream}/${REQUIRED_UPSTREAM} independent`}
+            edges={outgoing}
+            pick={(edge) => edge.target}
           />
-        </section>
+        )}
 
-        <section>
-          <h2 className="text-xl font-medium tracking-tight">
-            {brand.customersPrompt}
-          </h2>
-          <p className="mt-2 max-w-md leading-relaxed text-ink-2">
-            {brand.customersPromptSupport}
-          </p>
-          <p className="mono mt-3 max-w-md text-ink-3">
-            Nobody you name has to confirm anything for your claim to complete.
-          </p>
-
-          {namedCustomers.length > 0 && (
-            <ExistingList
-              label={`Already named · ${progress.downstream}/${REQUIRED_DOWNSTREAM}`}
-              edges={namedCustomers}
-              pick={(edge) => edge.source}
-            />
-          )}
-
-          <StackEditor
-            action={saveCustomers.bind(null, company.slug)}
-            companyName={company.name}
-            mode="customers"
-            max={MAX_CUSTOMERS}
-            existingCredits={progress.downstream}
-            requiredCredits={claimed ? 0 : REQUIRED_DOWNSTREAM}
-            suggestionsFor={company.slug}
-            submitLabel="Save who we power"
-          />
-        </section>
-      </div>
+        <StackEditor
+          action={saveStack.bind(null, company.slug)}
+          companyName={company.name}
+          companyDomain={company.domain}
+          max={MAX_TOOLS}
+          existingCredits={progress.upstream}
+          requiredCredits={claimed ? 0 : REQUIRED_UPSTREAM}
+          suggestionsFor={company.slug}
+          submitLabel="Save my stack"
+        />
+      </section>
     </main>
-  );
-}
-
-function Counter({ value, required }: { value: number; required: number }) {
-  const done = value >= required;
-  return (
-    <span className={done ? "text-accent-ink" : "text-ink"}>
-      {Math.min(value, required)}/{required}
-      {done ? " ✓" : ""}
-    </span>
   );
 }
 

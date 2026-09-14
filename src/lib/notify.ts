@@ -11,13 +11,14 @@ import type { Company, MentionNotification, NotificationStatus } from "./types";
 export const MENTION_COOLDOWN_DAYS = 7;
 
 /**
- * Two reasons to write to a vendor, both of them recognition:
+ * One reason to write to a vendor, and it is recognition: somebody put their
+ * product in their own stack. The strongest trigger there is, and the only one
+ * left now that no vendor submits a customer list — every edge is a statement
+ * by the company making it about the tools it runs on.
  *
- * - USES_YOU: somebody credited their product. The strongest trigger there is.
- * - YOU_USE: a vendor named them as a customer. Worth knowing, and their
- *   chance to correct it.
+ * The column stays, because the notifications table records what was sent.
  */
-export type NotificationKind = "USES_YOU" | "YOU_USE";
+export type NotificationKind = "USES_YOU";
 
 export type NotifyOutcome =
   | "SENT"
@@ -44,24 +45,8 @@ export function composeMentionEmail(input: {
   mentionedBy: Company;
   mentionCount: number;
   claimUrl: string;
-  kind: NotificationKind;
 }): { subject: string; body: string } {
-  const { vendor, mentionedBy, mentionCount, claimUrl, kind } = input;
-
-  if (kind === "YOU_USE") {
-    return {
-      subject: `${mentionedBy.name} says you use their product`,
-      body: [
-        `${mentionedBy.name} added ${vendor.name} to the software companies using their product.`,
-        "",
-        "Your profile is already there. Claim it to confirm or correct that, see who else uses you, and credit the tools powering your own company.",
-        "",
-        `See who uses you: ${claimUrl}`,
-        "",
-        `— ${brand.name}, ${brand.category}.`,
-      ].join("\n"),
-    };
-  }
+  const { vendor, mentionedBy, mentionCount, claimUrl } = input;
 
   const subject =
     mentionCount > 1
@@ -164,7 +149,6 @@ export async function notifyMention(input: {
     mentionedBy,
     mentionCount,
     claimUrl,
-    kind,
   });
 
   if (!input.force) {
