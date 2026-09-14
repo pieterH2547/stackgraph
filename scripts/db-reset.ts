@@ -1,8 +1,8 @@
 import "./load-env";
-import { truncateAll } from "../src/lib/db/client";
+import { resolvedDatabaseUrl, truncateAll } from "../src/lib/db/client";
 
 async function main() {
-  const url = process.env.DATABASE_URL ?? "file:./.data/stackgraph.db";
+  const url = resolvedDatabaseUrl();
   if (!url.startsWith("file:") && process.env.ALLOW_REMOTE_RESET !== "1") {
     throw new Error(
       `Refusing to empty a remote database (${url}). Set ALLOW_REMOTE_RESET=1 if you really mean it.`,

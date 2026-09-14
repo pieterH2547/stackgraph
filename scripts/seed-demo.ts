@@ -14,13 +14,13 @@
  * then go through the same claim flow as everyone else.
  */
 import "./load-env";
-import { ensureSchema, getDb } from "../src/lib/db/client";
+import { ensureSchema, getDb, resolvedDatabaseUrl } from "../src/lib/db/client";
 import { getCompanyByDomain, updateCompany } from "../src/lib/db/queries";
 import { addCompany, submitCustomers, submitStack } from "../src/lib/network";
 import { nowIso } from "../src/lib/ids";
 import type { Company } from "../src/lib/types";
 
-const url = process.env.DATABASE_URL ?? "file:./.data/stackgraph.db";
+const url = resolvedDatabaseUrl();
 const isLocalFile = url.startsWith("file:");
 
 /** The email step of a claim. The three edges still have to be earned. */

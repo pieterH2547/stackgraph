@@ -32,17 +32,27 @@ function localFilePath(url: string): string | null {
   return resolve(/* turbopackIgnore: true */ process.cwd(), withoutScheme);
 }
 
+/**
+ * `DATABASE_URL` is ours. `TURSO_DATABASE_URL` is what Turso's own Vercel
+ * integration injects when it provisions a database from the import screen,
+ * and accepting it means that button works with nothing typed by hand.
+ */
+export function resolvedDatabaseUrl(): string {
+  return process.env.DATABASE_URL || process.env.TURSO_DATABASE_URL || DEFAULT_URL;
+}
+
+function authToken(): string | undefined {
+  return process.env.DATABASE_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN;
+}
+
 function connect(): Client {
-  const url = process.env.DATABASE_URL || DEFAULT_URL;
+  const url = resolvedDatabaseUrl();
   const file = localFilePath(url);
   if (file) {
     mkdirSync(dirname(file), { recursive: true });
     return createClient({ url: `file:${file}` });
   }
-  return createClient({
-    url,
-    authToken: process.env.DATABASE_AUTH_TOKEN,
-  });
+  return createClient({ url, authToken: authToken() });
 }
 
 /**

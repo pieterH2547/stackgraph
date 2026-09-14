@@ -117,8 +117,8 @@ npm test                 # 48 tests, no network, no mail provider
 
 | Variable | Meaning |
 | --- | --- |
-| `DATABASE_URL` | `file:` path locally, libSQL/Turso URL in production. On Vercel without one, it falls back to `/tmp` — the app runs but data lives only as long as that instance. |
-| `DATABASE_AUTH_TOKEN` | Turso token, if the URL needs one. |
+| `DATABASE_URL` | `file:` path locally, libSQL/Turso URL in production. `TURSO_DATABASE_URL` is accepted too, because that is the name Turso's own Vercel integration injects. On Vercel with neither, it falls back to `/tmp`: the app runs, but each serverless instance gets its own copy, so two requests can disagree and nothing survives. |
+| `DATABASE_AUTH_TOKEN` | Turso token, if the URL needs one. `TURSO_AUTH_TOKEN` is accepted as well. |
 | `NEXT_PUBLIC_SITE_URL` | Used for share links, claim links and OG images. Falls back to the Vercel URL. |
 | `RESEND_API_KEY` | With no key, every notification is written to the `notifications` table and printed to the log instead of being delivered, and claim links are shown on screen so the loop stays walkable locally. |
 | `ADMIN_TOKEN` | Unlocks `/admin`. Unset means admin is unreachable. |
