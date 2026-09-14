@@ -5,7 +5,7 @@ import type { Claim } from "./types";
 const TTL_HOURS = 72;
 
 /** Free-mail domains can't prove anything, so they never auto-approve. */
-const PUBLIC_EMAIL_DOMAINS = new Set([
+export const PUBLIC_EMAIL_DOMAINS = new Set([
   "gmail.com",
   "googlemail.com",
   "outlook.com",

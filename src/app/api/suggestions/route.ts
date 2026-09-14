@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCompanyBySlug } from "@/lib/db/queries";
 import { canEdit } from "@/lib/session";
+import { canManage } from "@/lib/auth/session";
 import { suggestPoweredBy } from "@/lib/signals";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +23,9 @@ export async function GET(request: Request) {
   if (!company) {
     return NextResponse.json({ suggestions: [] }, { status: 404 });
   }
-  if (!(await canEdit(company.id))) {
+  // Either door: a member of the company, or the legacy edit-token cookie
+  // from a claim made before accounts existed.
+  if (!(await canManage(company.id)) && !(await canEdit(company.id))) {
     return NextResponse.json({ suggestions: [] }, { status: 403 });
   }
 

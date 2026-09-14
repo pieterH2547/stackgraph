@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import { SignOut } from "@/components/SignOut";
 import { brand } from "@/lib/brand";
+import { routes } from "@/lib/routes";
+import { currentUser } from "@/lib/auth/session";
 import { absoluteUrl, noIndex } from "@/lib/url";
 import "./globals.css";
 
@@ -42,7 +45,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   );
 }
 
-function SiteHeader() {
+/**
+ * Signing in is never in front of browsing, so the header only changes for
+ * somebody who already has an account: a way back to their company, instead
+ * of an invitation to make one.
+ */
+async function SiteHeader() {
+  const user = await currentUser();
+
   return (
     <header className="border-b border-line">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
@@ -70,12 +80,24 @@ function SiteHeader() {
           >
             Network
           </Link>
-          <Link
-            href="/add"
-            className="btn btn-primary shrink-0 !px-3.5 !py-2 !text-sm"
-          >
-            {brand.ctaPrimary}
-          </Link>
+          {user ? (
+            <>
+              <SignOut />
+              <Link
+                href={routes.dashboard()}
+                className="btn btn-primary shrink-0 !px-3.5 !py-2 !text-sm"
+              >
+                My company
+              </Link>
+            </>
+          ) : (
+            <Link
+              href="/add"
+              className="btn btn-primary shrink-0 !px-3.5 !py-2 !text-sm"
+            >
+              {brand.ctaPrimary}
+            </Link>
+          )}
         </nav>
       </div>
     </header>

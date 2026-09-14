@@ -17,6 +17,10 @@ export const routes = {
   claimVerify: (slug: string, token: string) =>
     `/claim/${slug}/verify?token=${token}`,
   claimExpired: () => "/claim/expired",
+  signIn: () => "/signin",
+  signInFor: (slug: string) => `/signin?claim=${encodeURIComponent(slug)}`,
+  dashboard: () => "/dashboard",
+  manage: (slug: string) => `/manage/${slug}`,
 } as const;
 
 /**

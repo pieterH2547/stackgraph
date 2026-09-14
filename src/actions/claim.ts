@@ -19,7 +19,9 @@ import {
 import { sendEmail, showsDevLinks } from "@/lib/email";
 import { track } from "@/lib/events";
 import { settleClaim } from "@/lib/network";
-import { grantEditAccess } from "@/lib/session";
+import { settleOwnership } from "@/lib/auth/claim";
+import { startSession } from "@/lib/auth/session";
+import { upsertUser } from "@/lib/auth/store";
 import { postClaimDestination, routes } from "@/lib/routes";
 import { absoluteUrl } from "@/lib/url";
 
@@ -124,7 +126,23 @@ export async function completeClaim(token: string): Promise<void> {
   }
 
   await confirmClaim(claim.id);
-  await grantEditAccess(company.id);
+
+  /*
+   * One ownership rule, one place. This path used to call grantEditAccess
+   * unconditionally, so anybody who could read any mailbox could manage any
+   * company — eve@gmail.com clicking a link for posthog.com got PostHog's
+   * stack. Verifying an address proves you can read that mailbox and nothing
+   * else; whether it proves ownership is settleOwnership's decision, and now
+   * both doors ask it.
+   */
+  const person = await upsertUser({ email: claim.email, provider: "email" });
+  await startSession(person.id);
+  const outcome = await settleOwnership({ user: person, companyId: company.id });
+  if (outcome.status !== "APPROVED") {
+    redirect(
+      `${routes.profile(company.slug)}?claim=${outcome.status.toLowerCase()}&why=${outcome.reason}`,
+    );
+  }
 
   // A vendor who somehow already has three credits is claimed on the spot.
   const refreshed = (await getCompanyById(company.id)) ?? company;

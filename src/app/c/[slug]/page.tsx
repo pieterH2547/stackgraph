@@ -12,6 +12,8 @@ import { companiesCount, companiesSay, padCount, timeAgo } from "@/lib/format";
 import { countIncomingOnNetwork, getCompanyBySlug } from "@/lib/db/queries";
 import { getProfile } from "@/lib/network";
 import { canEdit } from "@/lib/session";
+import { canManage } from "@/lib/auth/session";
+import { routes } from "@/lib/routes";
 import { stackShareText } from "@/lib/share";
 import type { Company, DetectedTool, RelationshipEdge } from "@/lib/types";
 import { absoluteUrl } from "@/lib/url";
@@ -67,10 +69,15 @@ export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
   if (!company) notFound();
 
   const { outgoing, incoming, usedByCount } = await getProfile(company);
-  const [mine, onNetwork] = await Promise.all([
+  const [manages, legacyEditor, onNetwork] = await Promise.all([
+    // Real ownership: a row in company_members, which survives a new device.
+    canManage(company.id),
+    // The edit-token cookie this predates. Kept so a claim made before
+    // accounts existed still works from that browser.
     canEdit(company.id),
     countIncomingOnNetwork(company.id),
   ]);
+  const mine = manages || legacyEditor;
 
   const claimed = company.status === "CLAIMED";
   const connections = incoming.length + outgoing.length;
@@ -127,13 +134,22 @@ export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
         </div>
 
         <div className="flex shrink-0 flex-wrap gap-2">
-          {mine && (
+          {manages ? (
             <Link
-              href={`/stack/${company.slug}`}
+              href={routes.manage(company.slug)}
               className="btn btn-secondary !py-2 !text-sm"
             >
-              Edit my stack
+              Manage
             </Link>
+          ) : (
+            legacyEditor && (
+              <Link
+                href={`/stack/${company.slug}`}
+                className="btn btn-secondary !py-2 !text-sm"
+              >
+                Edit my stack
+              </Link>
+            )
           )}
           <a
             href={company.website}
@@ -307,7 +323,7 @@ function UsedBy({
         </p>
         {company.status === "UNCLAIMED" && (
           <p className="mt-4">
-            <Link href={`/claim/${company.slug}`} className="btn btn-primary">
+            <Link href={routes.signInFor(company.slug)} className="btn btn-primary">
               Claim this profile
             </Link>
           </p>
@@ -333,7 +349,7 @@ function UsedBy({
           profile, so nothing on it is a statement from them.
         </p>
         <div className="mt-5">
-          <Link href={`/claim/${company.slug}`} className="btn btn-primary">
+          <Link href={routes.signInFor(company.slug)} className="btn btn-primary">
             {brand.ctaSeeWhoUsesYou}
           </Link>
         </div>
@@ -414,7 +430,7 @@ function SpottedOnSite({
         ))}
       </ul>
       <div className="mt-5">
-        <Link href={`/claim/${slug}`} className="btn btn-secondary">
+        <Link href={routes.signInFor(slug)} className="btn btn-secondary">
           Claim this profile to confirm your stack
         </Link>
       </div>

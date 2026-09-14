@@ -102,6 +102,66 @@ CREATE TABLE IF NOT EXISTS claims (
 
 CREATE INDEX IF NOT EXISTS claims_company_idx ON claims (company_id);
 
+-- A person, identified by the email address they proved they can read.
+--
+-- Deliberately thin: no password (there is none to steal or reset), no
+-- profile, no settings. Identity exists so that ownership survives a new
+-- laptop, which the edit-token cookie could never do.
+CREATE TABLE IF NOT EXISTS users (
+  id            TEXT PRIMARY KEY,
+  email         TEXT NOT NULL UNIQUE,
+  name          TEXT,
+  image_url     TEXT,
+  -- google or email: which door they came through, kept for audit.
+  last_provider TEXT,
+  created_at    TEXT NOT NULL,
+  last_seen_at  TEXT NOT NULL
+);
+
+-- One row per signed-in browser. Rotated on sign-in, deleted on sign-out.
+CREATE TABLE IF NOT EXISTS sessions (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions (user_id);
+
+-- Who may manage a company.
+--
+-- Only OWNER is issued today. The role column exists so MEMBER and ADMIN can
+-- be added without a migration, and every authorisation check reads this
+-- table rather than a cookie — a cookie says which browser, this says who.
+CREATE TABLE IF NOT EXISTS company_members (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  company_id TEXT NOT NULL REFERENCES companies (id) ON DELETE CASCADE,
+  role       TEXT NOT NULL DEFAULT 'OWNER',
+  created_at TEXT NOT NULL,
+  UNIQUE (user_id, company_id)
+);
+
+CREATE INDEX IF NOT EXISTS members_user_idx    ON company_members (user_id);
+CREATE INDEX IF NOT EXISTS members_company_idx ON company_members (company_id);
+
+-- A sign-in link, and the claim intent it was started from.
+--
+-- intent_company_id is why a claim never has to be restarted after signing
+-- in: the company being claimed is remembered on the server, not in a query
+-- string that a redirect can lose.
+CREATE TABLE IF NOT EXISTS login_tokens (
+  id                TEXT PRIMARY KEY,
+  email             TEXT NOT NULL,
+  token             TEXT NOT NULL UNIQUE,
+  intent_company_id TEXT REFERENCES companies (id) ON DELETE SET NULL,
+  expires_at        TEXT NOT NULL,
+  used_at           TEXT,
+  created_at        TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS login_tokens_email_idx ON login_tokens (email);
+
 CREATE TABLE IF NOT EXISTS notifications (
   id                    TEXT PRIMARY KEY,
   company_id            TEXT NOT NULL REFERENCES companies (id) ON DELETE CASCADE,
@@ -130,6 +190,10 @@ CREATE INDEX IF NOT EXISTS events_created_idx ON events (created_at);
 `;
 
 export const TABLES = [
+  "login_tokens",
+  "company_members",
+  "sessions",
+  "users",
   "events",
   "notifications",
   "claims",
