@@ -73,6 +73,8 @@ export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
   ]);
 
   const claimed = company.status === "CLAIMED";
+  const connections = incoming.length + outgoing.length;
+  const about = aboutBeyondTagline(company.about, company.description);
   // Progressive unlock: an unclaimed vendor sees how many companies name them
   // and how many are on the network, but not who. That's the reason to claim.
   const revealed = claimed || mine;
@@ -115,6 +117,12 @@ export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
               </span>
             )}
             <span>Updated {timeAgo(company.updatedAt)}</span>
+            {connections > 0 && (
+              <span>
+                <span className="text-ink-2">{padCount(connections)}</span>{" "}
+                {connections === 1 ? "connection" : "connections"}
+              </span>
+            )}
           </div>
         </div>
 
@@ -137,6 +145,50 @@ export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
           </a>
         </div>
       </header>
+
+      {/*
+       * Their own account of themselves, in their own words. Two sources only:
+       * the description they wrote on purpose, and their own /about page. Not
+       * our prose, and not their homepage — homepages are where testimonials
+       * live, and a customer's sentence presented as the vendor's is the one
+       * misattribution this product cannot make.
+       */}
+      {(about || company.whatItDoes.length > 0) && (
+        <section className="mt-12 grid gap-10 border-t border-line pt-8 md:grid-cols-[1.6fr_1fr] md:gap-14">
+          {about && (
+            <div>
+              <SectionHead
+                title="About"
+                aside={
+                  <span className="mono text-ink-3">
+                    From {company.domain}
+                  </span>
+                }
+              />
+              <p className="max-w-prose leading-relaxed text-ink-2">{about}</p>
+            </div>
+          )}
+
+          {company.whatItDoes.length > 0 && (
+            <div>
+              <SectionHead title="What it does" />
+              <ul className="space-y-2 text-ink-2">
+                {company.whatItDoes.map((item) => (
+                  <li key={item} className="flex gap-2.5 leading-relaxed">
+                    <span aria-hidden className="mono shrink-0 text-ink-3">
+                      ·
+                    </span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mono mt-3 text-ink-3">
+                Their own feature list, {company.domain}
+              </p>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* 2 + 3 — the proof, and the reason to claim it */}
       <UsedBy
@@ -274,11 +326,7 @@ function UsedBy({
           {companiesSay(usedByCount)} they use {company.name}.
         </p>
         {onNetwork > 0 && (
-          <p className="mt-2 text-ink-2">
-            {onNetwork === usedByCount
-              ? `All ${onNetwork === 1 ? "of them is" : onNetwork + " are"} already on the network.`
-              : `${onNetwork} of them ${onNetwork === 1 ? "is" : "are"} already on the network.`}
-          </p>
+          <p className="mt-2 text-ink-2">{onNetworkLine(onNetwork, usedByCount)}</p>
         )}
         <p className="mono mt-3 text-ink-3">
           Claim {company.name} to see who. Nobody there has claimed this
@@ -372,6 +420,40 @@ function SpottedOnSite({
       </div>
     </section>
   );
+}
+
+/**
+ * "3 of them are already on the network", except when all of them are, and
+ * except when there is only one — "All of them is" was the first attempt.
+ */
+function onNetworkLine(onNetwork: number, total: number): string {
+  if (onNetwork === 1 && total === 1) return "It is already on the network.";
+  if (onNetwork === total) return `All ${onNetwork} are already on the network.`;
+  return onNetwork === 1
+    ? "One of them is already on the network."
+    : `${onNetwork} of them are already on the network.`;
+}
+
+/**
+ * The one-liner is the meta description, and the About is built starting from
+ * that same sentence, so showing both verbatim reads like a stutter. Drop the
+ * duplicated opening and keep the rest.
+ */
+function aboutBeyondTagline(
+  about: string | null,
+  tagline: string | null,
+): string | null {
+  if (!about) return null;
+  if (!tagline) return about;
+
+  const normalise = (text: string) => text.trim().replace(/\s+/g, " ");
+  const head = normalise(tagline).replace(/[.!?]$/, "");
+  const body = normalise(about);
+  if (!head || !body.toLowerCase().startsWith(head.toLowerCase())) return about;
+
+  const rest = body.slice(head.length).replace(/^[.!?]\s*/, "").trim();
+  // If the About was only the tagline, there is nothing left worth a heading.
+  return rest.split(/\s+/).filter(Boolean).length >= 20 ? rest : null;
 }
 
 function SectionHead({

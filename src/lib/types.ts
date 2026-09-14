@@ -77,6 +77,13 @@ export interface Company {
    * other vendor's profile, no outreach.
    */
   detectedStack: DetectedTool[] | null;
+  /**
+   * 50-100 words in the company's own voice, from their metadata and their own
+   * /about page. Shown attributed to their site; never our prose about them.
+   */
+  about: string | null;
+  /** 2-4 capability phrases from their own feature list. */
+  whatItDoes: string[];
   contactEmail: string | null;
   claimName: string | null;
   claimRole: string | null;

@@ -424,6 +424,12 @@ export async function enrichCompany(companyId: string): Promise<void> {
         (spotted.length > 0
           ? spotted.slice(0, 6).map(({ domain, name }) => ({ domain, name }))
           : null),
+      // Their own words, and only ever filling a blank.
+      about: company.about ?? detected.about,
+      whatItDoes:
+        company.whatItDoes.length > 0
+          ? company.whatItDoes
+          : detected.whatItDoes,
     });
   } catch {
     // A vendor site being unreachable is not an error worth surfacing.

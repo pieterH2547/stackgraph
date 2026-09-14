@@ -35,8 +35,8 @@ function bool(value: unknown): boolean {
 const COMPANY_COLUMNS = `
   id, slug, name, domain, website, logo_url, description, category, audience,
   built_by, status, network_eligible, eligibility_reason, source, generation,
-  detected_at, detected_from, detected_stack, contact_email, claim_name,
-  claim_role,
+  detected_at, detected_from, detected_stack, about, what_it_does,
+  contact_email, claim_name, claim_role,
   claim_verified_at, claimed_at, is_demo, created_at, updated_at
 `;
 
@@ -46,6 +46,20 @@ const COMPANY_COLUMN_NAMES = COMPANY_COLUMNS.split(",")
 
 function prefixedColumns(prefix: string): string {
   return COMPANY_COLUMN_NAMES.map((column) => `${prefix}.${column}`).join(", ");
+}
+
+/** A JSON array of short strings, or nothing. Never throws. */
+function parseStringArray(value: unknown): string[] {
+  if (typeof value !== "string" || !value.trim()) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (entry): entry is string => typeof entry === "string" && entry.length > 0,
+    );
+  } catch {
+    return [];
+  }
 }
 
 function parseDetectedStack(value: unknown): DetectedTool[] | null {
@@ -85,6 +99,8 @@ export function mapCompany(row: Row): Company {
     detectedAt: optStr(row.detected_at),
     detectedFrom: optStr(row.detected_from),
     detectedStack: parseDetectedStack(row.detected_stack),
+    about: optStr(row.about),
+    whatItDoes: parseStringArray(row.what_it_does),
     contactEmail: optStr(row.contact_email),
     claimName: optStr(row.claim_name),
     claimRole: optStr(row.claim_role),
@@ -271,6 +287,8 @@ export interface UpdateCompanyPatch {
   detectedAt?: string | null;
   detectedFrom?: string | null;
   detectedStack?: DetectedTool[] | null;
+  about?: string | null;
+  whatItDoes?: string[] | null;
 }
 
 const PATCH_COLUMNS: Record<keyof UpdateCompanyPatch, string> = {
@@ -292,6 +310,8 @@ const PATCH_COLUMNS: Record<keyof UpdateCompanyPatch, string> = {
   detectedAt: "detected_at",
   detectedFrom: "detected_from",
   detectedStack: "detected_stack",
+  about: "about",
+  whatItDoes: "what_it_does",
 };
 
 export async function updateCompany(

@@ -33,6 +33,15 @@ CREATE TABLE IF NOT EXISTS companies (
   -- their website", which is a question for the founder, not a statement
   -- about them. A JSON array of { domain, name }.
   detected_stack     TEXT,
+  -- 50-100 words in the company's own voice, read from their deliberate
+  -- metadata and their own /about page. Extracted, never written by us, and
+  -- never taken from homepage marketing copy — that is where testimonials
+  -- live, and attributing a customer's sentence to the vendor is the one
+  -- mistake this product cannot make.
+  about              TEXT,
+  -- 2-4 short capability phrases from their own feature list, as a JSON
+  -- array. Empty unless the markup really was a feature list.
+  what_it_does       TEXT,
   contact_email      TEXT,
   claim_name         TEXT,
   claim_role         TEXT,
@@ -135,4 +144,6 @@ export const TABLES = [
  */
 export const ADDITIVE_COLUMNS = [
   "ALTER TABLE companies ADD COLUMN detected_stack TEXT",
+  "ALTER TABLE companies ADD COLUMN about TEXT",
+  "ALTER TABLE companies ADD COLUMN what_it_does TEXT",
 ] as const;
