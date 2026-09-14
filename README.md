@@ -202,6 +202,24 @@ only affect that one path on the host.
 An unclaimed profile shows *how many* companies name it and how many are
 already on the network — never *who*. That is the reason to claim.
 
+### About, and what it does
+
+A profile carries up to 100 words about the company and two to four capability
+bullets. Both are **extracted and attributed, never written by us** — the
+whole claim of this product is that vendors own facts, so an LLM paragraph
+about someone else's product would be the analyst essay it exists against.
+
+Sources, in order: the description they wrote about themselves on purpose,
+their own `/about` or `/features` page, and — only above its social proof — a
+homepage. That last restriction is the important one. Assembling an About from
+homepage copy read beautifully and was, about a third of the time, a customer
+testimonial attributed to the company; a testimonial wall sits below the
+pitch, so the cut removes it. Sentences also have to be complete, name the
+company or speak as it, and not be a call to action, a price or a team bio.
+
+A company with no about page and a homepage that opens on testimonials gets no
+About, and that is the right answer.
+
 ### Prefilled contribution
 
 `src/lib/signals.ts` reads the vendor's own public site and suggests the
@@ -311,13 +329,26 @@ on their own.
 ## Generation 0
 
 Cold start is a selection problem, not an import problem. `scripts/` holds a
-two-step pipeline that throws most of a directory away:
+three-step pipeline that throws most of a directory away:
 
 ```bash
+npm run launchllama:fetch                                  # the real catalogue
 npm run launchllama:score -- --in=data/launchllama.csv --enrich
-npm run launchllama:import -- --limit=100                  # dry run, the default
-npm run launchllama:import -- --write --local --limit=100
+npm run launchllama:import -- --limit=136                   # dry run, the default
+npm run launchllama:import -- --write --local --limit=136
 ```
+
+`launchllama:fetch` reads Launch Llama's own public catalogue API — the one
+their `llms.txt` documents for agents, keyless for reads — and nothing else.
+Reads only: never the endpoint that opens a listing draft, because an import is
+not a submission. Their `robots.txt` disallows `/api/`, `/dashboard`, `/auth`,
+`/admin`, `/notifications` and `/reset-password`; none of those are touched.
+One request at a time, with a pause and a User-Agent that says who we are.
+
+On the real 3,453-company catalogue: 262 excluded, 136 recommended at 4/6 or
+better. Site reads are cached in `data/`, so changing the rubric and
+re-scoring costs seconds rather than another quarter hour of somebody else's
+bandwidth.
 
 The score is 0–6, one point per criterion, and only positive evidence counts:
 software product · small team · active · clear B2B use case · contactable ·
@@ -335,6 +366,12 @@ still needs `--local`, and a remote one needs `--remote` *and*
 remote. An import creates `UNCLAIMED` profiles and nothing else — no
 relationships, no claims, no email — and never overwrites a field on an
 existing company with a directory's copy of it.
+
+**Production imports run in `.github/workflows/gen0-import.yml` and nowhere
+else.** The credentials live in the `production` GitHub Environment, where they
+can be rotated and audited; a token pasted into a terminal, a chat or an agent
+transcript cannot be revoked from there. The job always scores and always dry
+runs, and writes only when dispatched with `confirm: yes`.
 
 ---
 

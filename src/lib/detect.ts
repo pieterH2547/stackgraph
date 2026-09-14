@@ -40,11 +40,30 @@ export interface DetectedSite {
 const TIMEOUT_MS = 6000;
 
 /** The About budget. Under the floor we'd rather show nothing. */
-const ABOUT_MIN_WORDS = 25;
+const ABOUT_MIN_WORDS = 20;
 const ABOUT_MAX_WORDS = 100;
 
 /** Where a company describes itself in its own voice, by convention. */
-const ABOUT_PAGES = ["/about", "/about-us", "/company", "/story"];
+const ABOUT_PAGES = [
+  "/about",
+  "/about-us",
+  "/company",
+  "/story",
+  // One notch wider. These are self-description by construction too, and a
+  // small product is far more likely to have a /features page than an
+  // /about one — Tally has neither an /about nor a company story.
+  "/features",
+  "/product",
+  "/how-it-works",
+  "/why",
+];
+
+/**
+ * Where a homepage stops describing the company and starts quoting customers.
+ * Everything from here down is off limits as an About source.
+ */
+const SOCIAL_PROOF_CUE =
+  /(testimonial|what our (customers|users)|loved by|trusted by|customer stories|case stud|reviews?|wall of love|don'?t just take our word)/i;
 
 function decodeEntities(input: string): string {
   return input
@@ -461,6 +480,29 @@ export function buildWhatItDoes(html: string): string[] {
 }
 
 /**
+ * The part of a homepage above its social proof.
+ *
+ * The fallback for a product with no /about page, and the one place homepage
+ * copy is allowed: a testimonial wall sits below the pitch, so cutting at the
+ * first social-proof cue removes the section that caused the misattribution
+ * while keeping the company's own opening. Everything still goes through the
+ * same filters — no quotes, no first person singular, no he/she, no calls to
+ * action, complete sentences, and it has to name them or speak as them.
+ */
+export function homepageAbove(html: string): string {
+  const text = stripFurniture(html);
+  const cue = text.search(SOCIAL_PROOF_CUE);
+  if (cue === -1) return text;
+  /*
+   * Enough copy above the cue to be a pitch rather than a sliver. A page that
+   * opens straight into a testimonial wall has nothing here worth taking, and
+   * a hero plus subtitle is routinely only a couple of hundred characters —
+   * the first guess at 400 threw those away.
+   */
+  return cue > 200 ? text.slice(0, cue) : "";
+}
+
+/**
  * Their /about page, if they have one. Tried in order and the first page that
  * answers with HTML wins; none of them existing is a perfectly normal outcome
  * for a small product.
@@ -562,7 +604,11 @@ export async function detectSite(input: string): Promise<DetectedSite> {
     category: guessCategory(`${title ?? ""} ${description ?? ""}`),
     socials: findSocials(head),
     contactEmail: findContactEmail(html, domain),
-    about: buildAbout(await fetchAboutPage(website), description, name),
+    about: buildAbout(
+      (await fetchAboutPage(website)) || homepageAbove(html),
+      description,
+      name,
+    ),
     whatItDoes: buildWhatItDoes(html),
     detectedFrom: "website",
     detectedAt,

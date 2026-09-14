@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildAbout, buildWhatItDoes } from "@/lib/detect";
+import { buildAbout, buildWhatItDoes, homepageAbove } from "@/lib/detect";
 
 const words = (text: string | null) =>
   (text ?? "").split(/\s+/).filter(Boolean).length;
@@ -142,5 +142,33 @@ describe("What it does comes from a real feature list", () => {
       (_, i) => `<li>Feature number ${i} that does something</li>`,
     ).join("")}</ul></main></body>`;
     expect(buildWhatItDoes(many)).toHaveLength(4);
+  });
+});
+
+describe("the homepage fallback stops at the social proof", () => {
+  const own =
+    "Acme Forms is an independent company based in Ghent. We built it because form builders had drifted into bloat and we wanted one a person could use in a minute.";
+
+  it("uses homepage copy above a testimonial wall", () => {
+    // The notch that gives a product with no /about page an About at all.
+    // A hero and a subtitle, which is what a real page has above its proof.
+    const html = `<body><main><p>${own}</p>
+      <p>Acme keeps forms boring on purpose: we would rather ship one that
+      works everywhere than ten that photograph well.</p>
+      <h2>Loved by 7,000 teams</h2>
+      <p>Acme changed everything for us and we will never go back.</p>
+      </main></body>`;
+    const about = buildAbout(homepageAbove(html), null, "Acme");
+    expect(about).toContain("independent company based in Ghent");
+    expect(about).not.toContain("changed everything");
+  });
+
+  it("uses nothing when the social proof comes first", () => {
+    const html = `<body><main><h2>Trusted by 7,000 teams</h2>
+      <p>Acme changed everything for us and we will never go back.</p>
+      <p>${own}</p></main></body>`;
+    // Cutting here would leave nothing, and nothing is the right answer:
+    // below the cue every sentence is somebody else's.
+    expect(buildAbout(homepageAbove(html), null, "Acme")).toBeNull();
   });
 });

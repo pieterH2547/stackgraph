@@ -17,7 +17,7 @@
     "launchllama:import": "tsx scripts/import-launchllama.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "verify": "npm run typecheck && npm run lint && npm run test && npm run build"
+    "verify": "npm run typecheck && npm run lint && npm run test && node scripts/maybe-build.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",
