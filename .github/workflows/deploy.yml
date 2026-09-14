@@ -48,8 +48,8 @@ jobs:
       - name: Install the Vercel CLI
         run: npm i -g vercel@latest
 
-      # `production` for a push to main or an explicit dispatch; preview
-      # otherwise, so a dispatch can be used to look at something first.
+      # Preview unless production was asked for, so a dispatch can be used to
+      # look at something before it is live.
       - name: Work out the target
         id: target
         run: |
