@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { routes } from "@/lib/routes";
 import { settleOwnership } from "@/lib/auth/claim";
+import { applyClaimDraft, parseDraft } from "@/lib/auth/draft";
 import { startSession } from "@/lib/auth/session";
 import { spendLoginToken, upsertUser } from "@/lib/auth/store";
 import { getCompanyById } from "@/lib/db/queries";
@@ -41,6 +42,9 @@ export async function GET(request: Request) {
   const outcome = await settleOwnership({ user, companyId: company.id });
 
   if (outcome.status === "APPROVED") {
+    // Only now. What the claim form collected has been sitting on the token
+    // row unapplied, because until this line nobody had proved anything.
+    await applyClaimDraft(company, parseDraft(spent.claimDraft));
     return NextResponse.redirect(new URL(routes.manage(company.slug), url));
   }
   return NextResponse.redirect(

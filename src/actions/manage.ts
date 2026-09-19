@@ -10,7 +10,7 @@ import {
   getEdgeById,
   updateCompany,
 } from "@/lib/db/queries";
-import { MAX_TOOLS } from "@/lib/limits";
+import { MAX_DESCRIPTION, MAX_TOOLS } from "@/lib/limits";
 import { StackValidationError, submitStack } from "@/lib/network";
 import { routes } from "@/lib/routes";
 import { track } from "@/lib/events";
@@ -32,8 +32,6 @@ export interface ManageState {
 /* -------------------------------------------------------------------------- */
 /* the profile a company controls                                             */
 /* -------------------------------------------------------------------------- */
-
-const MAX_DESCRIPTION = 200;
 
 /**
  * What a company may say about itself. Notably absent: anything derived rather

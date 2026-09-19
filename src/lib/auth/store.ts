@@ -173,6 +173,8 @@ export interface LoginToken {
   email: string;
   token: string;
   intentCompanyId: string | null;
+  /** The claim form's contents, as JSON, or nothing. See ./draft.ts. */
+  claimDraft: string | null;
   expiresAt: string;
   usedAt: string | null;
 }
@@ -184,6 +186,10 @@ function mapLoginToken(row: Record<string, unknown>): LoginToken {
     token: String(row.token),
     intentCompanyId:
       row.intent_company_id === null ? null : String(row.intent_company_id),
+    claimDraft:
+      row.claim_draft === null || row.claim_draft === undefined
+        ? null
+        : String(row.claim_draft),
     expiresAt: String(row.expires_at),
     usedAt: row.used_at === null ? null : String(row.used_at),
   };
@@ -197,6 +203,8 @@ function mapLoginToken(row: Record<string, unknown>): LoginToken {
 export async function createLoginToken(input: {
   email: string;
   intentCompanyId?: string | null;
+  /** The claim form's contents, held here so a new device does not lose it. */
+  claimDraft?: string | null;
 }): Promise<LoginToken> {
   const id = newId();
   const token = newToken();
@@ -206,13 +214,15 @@ export async function createLoginToken(input: {
 
   await getDb().execute({
     sql: `INSERT INTO login_tokens
-            (id, email, token, intent_company_id, expires_at, used_at, created_at)
-          VALUES (?, ?, ?, ?, ?, NULL, ?)`,
+            (id, email, token, intent_company_id, claim_draft,
+             expires_at, used_at, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, NULL, ?)`,
     args: [
       id,
       normalizeEmail(input.email),
       token,
       input.intentCompanyId ?? null,
+      input.claimDraft ?? null,
       expiresAt,
       nowIso(),
     ],

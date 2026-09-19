@@ -210,4 +210,7 @@ export const ADDITIVE_COLUMNS = [
   "ALTER TABLE companies ADD COLUMN detected_stack TEXT",
   "ALTER TABLE companies ADD COLUMN about TEXT",
   "ALTER TABLE companies ADD COLUMN what_it_does TEXT",
+  // What the claimant typed, held next to the token until the address is
+  // proved. See src/lib/auth/draft.ts for why it is not written yet.
+  "ALTER TABLE login_tokens ADD COLUMN claim_draft TEXT",
 ] as const;

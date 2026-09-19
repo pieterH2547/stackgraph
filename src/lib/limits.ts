@@ -23,3 +23,10 @@ export const REQUIRED_UPSTREAM = 2;
 
 /** Per submission. Room for a couple of incumbents alongside the required two. */
 export const MAX_TOOLS = 6;
+
+/**
+ * The one-liner a company writes about itself. A cap, not a target: the field
+ * is two rows high on purpose, because the profile's value is the graph around
+ * it and not the prose on it.
+ */
+export const MAX_DESCRIPTION = 200;

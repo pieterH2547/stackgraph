@@ -12,8 +12,16 @@ import {
   spendLoginToken,
   upsertUser,
 } from "@/lib/auth/store";
+import {
+  applyClaimDraft,
+  parseDraft,
+  readClaimDraft,
+  serializeDraft,
+  type ClaimDraft,
+} from "@/lib/auth/draft";
 import { addCompany } from "@/lib/network";
-import { getCompanyByDomain } from "@/lib/db/queries";
+import { getCompanyByDomain, updateCompany } from "@/lib/db/queries";
+import type { Company } from "@/lib/types";
 
 beforeEach(async () => {
   await resetDatabase();
@@ -191,6 +199,102 @@ describe("sign-in links", () => {
 
   it("refuses an unknown token", async () => {
     expect(await spendLoginToken("nope")).toBeNull();
+  });
+
+  it("carries the claim form across the inbox, including to another device", async () => {
+    const acme = await company("acme.dev", "Acme");
+    const draft = serializeDraft(takeDraft(acme, { name: "Acme Inc" }));
+    const token = await createLoginToken({
+      email: "sam@acme.dev",
+      intentCompanyId: acme.id,
+      claimDraft: draft,
+    });
+    const spent = await spendLoginToken(token.token);
+    expect(parseDraft(spent!.claimDraft)?.name).toBe("Acme Inc");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+function form(fields: Record<string, string>): FormData {
+  const data = new FormData();
+  for (const [key, value] of Object.entries(fields)) data.append(key, value);
+  return data;
+}
+
+function takeDraft(target: Company, fields: Record<string, string>): ClaimDraft {
+  const read = readClaimDraft(target, form(fields));
+  if ("error" in read) throw new Error(read.error);
+  return read.draft;
+}
+
+describe("what a claim form may do before anybody is proved", () => {
+  it("reads the profile fields it is given", async () => {
+    const acme = await company("acme.dev", "Acme");
+    const draft = takeDraft(acme, {
+      name: "Acme Inc",
+      description: "Async standup software.",
+      category: "Productivity",
+      audience: "remote teams",
+      builtBy: "two founders",
+      claimName: "Sam",
+      claimRole: "founder",
+    });
+    expect(draft.companyId).toBe(acme.id);
+    expect(draft.category).toBe("Productivity");
+    expect(draft.claimRole).toBe("founder");
+  });
+
+  it("refuses a category that is not one of ours", async () => {
+    const acme = await company("acme.dev", "Acme");
+    expect("error" in readClaimDraft(acme, form({ category: "Best Overall" }))).toBe(
+      true,
+    );
+  });
+
+  it("refuses to move the website to another domain", async () => {
+    // Otherwise the claim form is a way to take over a profile by typing.
+    const acme = await company("acme.dev", "Acme");
+    expect(
+      "error" in readClaimDraft(acme, form({ website: "https://evil.dev" })),
+    ).toBe(true);
+    expect(
+      "draft" in readClaimDraft(acme, form({ website: "https://acme.dev/x" })),
+    ).toBe(true);
+  });
+
+  it("changes nothing until it is applied", async () => {
+    const acme = await company("acme.dev", "Acme");
+    const draft = takeDraft(acme, { name: "Not Acme" });
+
+    expect((await getCompanyByDomain("acme.dev"))!.name).toBe("Acme");
+    await applyClaimDraft(acme, draft);
+    expect((await getCompanyByDomain("acme.dev"))!.name).toBe("Not Acme");
+  });
+
+  it("cannot be applied to a different company", async () => {
+    const acme = await company("acme.dev", "Acme");
+    const kettle = await company("kettle.app", "Kettle");
+    const draft = takeDraft(acme, { name: "Acme Inc" });
+
+    expect(await applyClaimDraft(kettle, draft)).toBe(false);
+    expect((await getCompanyByDomain("kettle.app"))!.name).toBe("Kettle");
+  });
+
+  it("leaves a blank field alone rather than erasing what is there", async () => {
+    const acme = await company("acme.dev", "Acme");
+    await updateCompany(acme.id, { description: "Read from their site." });
+    const draft = takeDraft(acme, { name: "Acme", description: "" });
+
+    await applyClaimDraft(acme, draft);
+    expect((await getCompanyByDomain("acme.dev"))!.description).toBe(
+      "Read from their site.",
+    );
+  });
+
+  it("survives a draft that is not a draft", () => {
+    expect(parseDraft("{oh no")).toBeNull();
+    expect(parseDraft(null)).toBeNull();
+    expect(parseDraft('{"name":"no company id"}')).toBeNull();
   });
 });
 

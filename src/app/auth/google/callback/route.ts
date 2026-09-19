@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { routes } from "@/lib/routes";
 import { exchangeGoogleCode } from "@/lib/auth/google";
 import { settleOwnership } from "@/lib/auth/claim";
+import { applyClaimDraft, parseDraft } from "@/lib/auth/draft";
 import { startSession } from "@/lib/auth/session";
 import { upsertUser } from "@/lib/auth/store";
 import { getCompanyBySlug } from "@/lib/db/queries";
@@ -25,6 +26,11 @@ export async function GET(request: Request) {
   const store = await cookies();
   const expected = store.get("wuw_oauth")?.value ?? "";
   store.delete("wuw_oauth");
+
+  // Read once and clear either way: a draft that outlived a failed or
+  // abandoned sign-in must not attach itself to the next one.
+  const draft = parseDraft(store.get("wuw_claim")?.value);
+  store.delete("wuw_claim");
 
   const [nonce, ...intentParts] = state.split(":");
   const intentSlug = intentParts.join(":");
@@ -58,6 +64,8 @@ export async function GET(request: Request) {
   const outcome = await settleOwnership({ user, companyId: company.id });
 
   if (outcome.status === "APPROVED") {
+    // Only now, and only for the company the draft was written against.
+    await applyClaimDraft(company, draft);
     return NextResponse.redirect(new URL(routes.manage(company.slug), url));
   }
   return NextResponse.redirect(
