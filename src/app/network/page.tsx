@@ -4,11 +4,19 @@ import { CompanyCard } from "@/components/CompanyCard";
 import { EdgeFeed } from "@/components/EdgeFeed";
 import { brand } from "@/lib/brand";
 import { padCount } from "@/lib/format";
+import { routes } from "@/lib/routes";
 import {
+  getNetworkGroupCounts,
   getNetworkStats,
-  listCompaniesWithCounts,
+  listClaimedCompanies,
+  listCreditedCompanies,
+  listIncumbentCompanies,
   listRecentEdges,
+  listSourcedCompanies,
 } from "@/lib/db/queries";
+
+/** How many of each group a page this long can carry without becoming a list. */
+const SHOWN = { claimed: 60, credited: 60, sourced: 24, incumbents: 60 };
 
 export const dynamic = "force-dynamic";
 
@@ -19,17 +27,19 @@ export const metadata: Metadata = {
 };
 
 export default async function NetworkPage() {
-  const [companies, stats, edges] = await Promise.all([
-    listCompaniesWithCounts(),
-    getNetworkStats(),
-    listRecentEdges(20),
-  ]);
+  const [stats, totals, claimed, credited, sourced, incumbents, edges] =
+    await Promise.all([
+      getNetworkStats(),
+      getNetworkGroupCounts(),
+      listClaimedCompanies(SHOWN.claimed),
+      listCreditedCompanies(SHOWN.credited),
+      listSourcedCompanies(SHOWN.sourced),
+      listIncumbentCompanies(SHOWN.incumbents),
+      listRecentEdges(20),
+    ]);
 
-  const claimed = companies.filter((company) => company.status === "CLAIMED");
-  const unclaimed = companies.filter(
-    (company) => company.status === "UNCLAIMED" && company.networkEligible,
-  );
-  const incumbents = companies.filter((company) => !company.networkEligible);
+  const empty =
+    totals.claimed + totals.credited + totals.sourced + totals.incumbents === 0;
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-12 sm:px-8 sm:py-16">
@@ -49,7 +59,7 @@ export default async function NetworkPage() {
         <span className="text-ink">{padCount(stats.claimed)}</span> claimed
       </p>
 
-      {companies.length === 0 ? (
+      {empty ? (
         <div className="mt-12 max-w-md">
           <p className="text-lg text-ink-2">
             Nothing here yet. The network starts with one company naming the
@@ -62,7 +72,7 @@ export default async function NetworkPage() {
       ) : (
         <>
           {claimed.length > 0 && (
-            <Section title="Claimed" count={claimed.length}>
+            <Section title="Claimed" count={totals.claimed} shown={claimed.length}>
               <Grid>
                 {claimed.map((company) => (
                   <CompanyCard
@@ -75,14 +85,15 @@ export default async function NetworkPage() {
             </Section>
           )}
 
-          {unclaimed.length > 0 && (
+          {credited.length > 0 && (
             <Section
               title="Credited, not claimed yet"
-              count={unclaimed.length}
+              count={totals.credited}
+              shown={credited.length}
               aside="Created because someone said they use them"
             >
               <Grid>
-                {unclaimed.map((company) => (
+                {credited.map((company) => (
                   <CompanyCard
                     key={company.id}
                     company={company}
@@ -93,10 +104,35 @@ export default async function NetworkPage() {
             </Section>
           )}
 
+          {sourced.length > 0 && (
+            <Section
+              title="Sourced, not claimed yet"
+              count={totals.sourced}
+              shown={sourced.length}
+              aside="Public profiles we built, waiting for their owner"
+            >
+              <Grid>
+                {sourced.map((company) => (
+                  <CompanyCard
+                    key={company.id}
+                    company={company}
+                    usedBy={company.incoming}
+                  />
+                ))}
+              </Grid>
+              <p className="mt-5 text-ink-2">
+                <Link href={routes.categories()} className="link">
+                  Browse all {totals.sourced.toLocaleString("en-GB")} by category
+                </Link>
+              </p>
+            </Section>
+          )}
+
           {incumbents.length > 0 && (
             <Section
               title="Big tools in the graph"
-              count={incumbents.length}
+              count={totals.incumbents}
+              shown={incumbents.length}
               aside="Visible as stack data, outside the active network"
             >
               <ul className="flex flex-wrap gap-x-5 gap-y-2 border-t border-line pt-4">
@@ -116,7 +152,11 @@ export default async function NetworkPage() {
           )}
 
           {edges.length > 0 && (
-            <Section title="Every connection" count={edges.length}>
+            <Section
+              title="Every connection"
+              count={stats.relationships}
+              shown={edges.length}
+            >
               <EdgeFeed edges={edges} />
             </Section>
           )}
@@ -126,14 +166,21 @@ export default async function NetworkPage() {
   );
 }
 
+/**
+ * `count` is how many there are; `shown` is how many are on the page. Saying
+ * only one of the two would either understate the graph or promise a list
+ * that isn't there.
+ */
 function Section({
   title,
   count,
+  shown,
   aside,
   children,
 }: {
   title: string;
   count: number;
+  shown: number;
   aside?: string;
   children: React.ReactNode;
 }) {
@@ -142,6 +189,11 @@ function Section({
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line pb-2.5">
         <h2 className="text-xl font-medium tracking-tight">
           {title} <span className="mono text-ink-3">{padCount(count)}</span>
+          {shown < count && (
+            <span className="mono ml-2 text-ink-3">
+              showing {padCount(shown)}
+            </span>
+          )}
         </h2>
         {aside && <span className="mono text-ink-3">{aside}</span>}
       </div>

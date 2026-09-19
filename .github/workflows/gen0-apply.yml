@@ -15,8 +15,16 @@ on:
       plan_run_id:
         description: "Run id of the 'Generation 0 · plan' run you approved"
         required: true
+      intake:
+        description: "Must match the intake the plan run was read against"
+        required: true
+        type: choice
+        default: recommended
+        options:
+          - recommended
+          - all
       limit:
-        description: "How many to import (0 = all recommended in the plan)"
+        description: "How many to import (0 = the whole intake in the plan)"
         required: true
         default: "0"
       confirm:
@@ -68,12 +76,18 @@ jobs:
       # stops here rather than importing nothing and reporting success.
       - name: Check the plan is real
         id: plan
-        run: npx tsx scripts/plan-summary.ts | tee -a "$GITHUB_OUTPUT"
+        run: |
+          npx tsx scripts/plan-summary.ts \
+            data/launchllama-stackgraph-review.csv \
+            ${{ inputs.intake == 'all' && '--all' || '' }} | tee -a "$GITHUB_OUTPUT"
 
       # The same list once more, so the log of the run that wrote also contains
       # what it wrote.
       - name: Dry run the approved plan
-        run: npm run launchllama:import -- --limit=${{ inputs.limit }}
+        run: |
+          npm run launchllama:import -- \
+            ${{ inputs.intake == 'all' && '--all' || '' }} \
+            --limit=${{ inputs.limit }}
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DATABASE_AUTH_TOKEN: ${{ secrets.DATABASE_AUTH_TOKEN }}
@@ -81,6 +95,7 @@ jobs:
       - name: Import to production
         run: |
           npm run launchllama:import -- \
+            ${{ inputs.intake == 'all' && '--all' || '' }} \
             --write --remote --confirm-whouseswhat-production \
             --limit=${{ inputs.limit }}
         env:
@@ -94,8 +109,10 @@ jobs:
             echo "### Generation 0 applied"
             echo
             echo "- plan run: ${{ inputs.plan_run_id }}"
+            echo "- intake: **${{ inputs.intake }}**"
             echo "- plan checksum: \`${{ steps.plan.outputs.checksum }}\`"
             echo "- recommended in plan: ${{ steps.plan.outputs.recommended }}"
+            echo "- importable in plan: ${{ steps.plan.outputs.importable }}"
             echo "- limit: ${{ inputs.limit }}"
             echo
             echo "Profiles are UNCLAIMED. No relationships, no claims and no"

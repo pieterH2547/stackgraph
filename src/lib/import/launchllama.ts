@@ -31,6 +31,8 @@ export interface Candidate {
   category: string;
   /** Whatever the export called it, kept for review. */
   sourceCategory: string;
+  /** An icon URL from the export, or "" when it gave nothing usable. */
+  logoUrl: string;
   source: string;
 }
 
@@ -77,6 +79,7 @@ const FIELDS = {
   website: ["website", "url", "link", "site", "website_url", "homepage", "domain", "product_url"],
   description: ["description", "tagline", "summary", "short_description", "pitch", "one_liner", "subtitle", "about", "excerpt"],
   category: ["category", "categories", "tags", "topics", "type", "industry", "niche", "tag"],
+  logo: ["logo_url", "logo", "icon_url", "icon", "image_url", "image", "favicon", "thumbnail"],
   team: ["employees", "team_size", "company_size", "size", "headcount", "team"],
   date: ["launch_date", "launched_at", "founded", "created_at", "date", "published_at", "updated_at", "launch"],
   contact: ["email", "contact", "contact_email", "founder", "maker", "maker_name", "twitter", "x", "founder_twitter", "linkedin"],
@@ -129,6 +132,25 @@ function judgeText(record: Record<string, string>, description: string): string 
 
 function selfDescription(record: Record<string, string>, description: string): string {
   return [pick(record, FIELDS.name), description].join(" ").toLowerCase();
+}
+
+/**
+ * The icon the export offers, if it is a URL at all.
+ *
+ * This is the one field here that reaches a page, so it is the one that has to
+ * be checked rather than trusted: a relative path, a data URI or a stray word
+ * would render as a broken image on a profile nobody has claimed yet, which is
+ * worse than the monogram it would have shown instead.
+ */
+function logoFrom(record: Record<string, string>): string {
+  const raw = pick(record, FIELDS.logo);
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.href : "";
+  } catch {
+    return "";
+  }
 }
 
 /** Directory traction, used for ordering only and never shown to anyone. */
@@ -290,6 +312,7 @@ export function scoreRecord(
     description,
     category: options.mapCategory(`${sourceCategory} ${description}`),
     sourceCategory,
+    logoUrl: logoFrom(record),
     source: options.source ?? "launchllama",
   };
 

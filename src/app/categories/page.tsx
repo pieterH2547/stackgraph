@@ -19,7 +19,17 @@ export const metadata: Metadata = {
  * a promise the graph cannot keep.
  */
 export default async function CategoriesPage() {
-  const categories = await listCategoryCounts();
+  const counts = await listCategoryCounts();
+
+  /*
+   * "Other" is the absence of a category, not a category, so it goes last
+   * however big it gets. Sorted purely by count it leads the page, which
+   * advertises what we could not work out as though it were a section.
+   */
+  const categories = [
+    ...counts.filter(({ category }) => category !== "Other"),
+    ...counts.filter(({ category }) => category === "Other"),
+  ];
 
   return (
     <main className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-16">
@@ -27,8 +37,10 @@ export default async function CategoriesPage() {
         Browse by category.
       </h1>
       <p className="mt-3 max-w-lg leading-relaxed text-ink-2">
-        Categories come from the companies themselves. Nothing here is ranked —
-        the number is how many companies sit in it.
+        A company that has claimed its profile picks its own category. The rest
+        are our best reading of what the product is, and “Other” is where we
+        could not tell. Nothing here is ranked — the number is how many
+        companies sit in it.
       </p>
 
       <div className="mt-7 max-w-xl">

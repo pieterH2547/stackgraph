@@ -4,11 +4,16 @@ import { notFound } from "next/navigation";
 import { CompanyCard } from "@/components/CompanyCard";
 import { SiteSearch } from "@/components/SiteSearch";
 import { brand } from "@/lib/brand";
-import { listCompaniesInCategory } from "@/lib/db/queries";
+import {
+  countCompaniesInCategory,
+  listCompaniesInCategory,
+} from "@/lib/db/queries";
 import { companiesCount } from "@/lib/format";
 import { routes } from "@/lib/routes";
 
 export const dynamic = "force-dynamic";
+
+const PER_PAGE = 60;
 
 export async function generateMetadata({
   params,
@@ -28,12 +33,27 @@ export async function generateMetadata({
  */
 export default async function CategoryPage({
   params,
+  searchParams,
 }: PageProps<"/categories/[category]">) {
   const { category } = await params;
   const name = decodeURIComponent(category);
-  const companies = await listCompaniesInCategory(name);
+
+  const requested = Number((await searchParams).page ?? 1);
+  const page = Number.isFinite(requested) ? Math.max(1, Math.trunc(requested)) : 1;
+
+  const [total, companies] = await Promise.all([
+    countCompaniesInCategory(name),
+    listCompaniesInCategory(name, PER_PAGE, (page - 1) * PER_PAGE),
+  ]);
 
   if (companies.length === 0) notFound();
+
+  const pages = Math.max(1, Math.ceil(total / PER_PAGE));
+  const first = (page - 1) * PER_PAGE + 1;
+  const pageHref = (n: number) =>
+    n === 1
+      ? `${routes.category(name)}`
+      : `${routes.category(name)}?page=${n}`;
 
   return (
     <main className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-16">
@@ -46,7 +66,12 @@ export default async function CategoryPage({
         {name}
       </h1>
       <p className="mt-3 leading-relaxed text-ink-2">
-        {companiesCount(companies.length)}, most connected first.
+        {companiesCount(total)}, most connected first.
+        {pages > 1 && (
+          <span className="mono ml-2 text-ink-3">
+            {first}–{first + companies.length - 1}
+          </span>
+        )}
       </p>
 
       <div className="mt-7 max-w-xl">
@@ -62,6 +87,31 @@ export default async function CategoryPage({
           />
         ))}
       </div>
+
+      {pages > 1 && (
+        <nav
+          aria-label="Pages"
+          className="mono mt-10 flex items-center justify-between border-t border-line pt-5 text-ink-3"
+        >
+          {page > 1 ? (
+            <Link href={pageHref(page - 1)} className="hover:text-accent-ink">
+              ← Previous
+            </Link>
+          ) : (
+            <span />
+          )}
+          <span>
+            Page {page} of {pages}
+          </span>
+          {page < pages ? (
+            <Link href={pageHref(page + 1)} className="hover:text-accent-ink">
+              Next →
+            </Link>
+          ) : (
+            <span />
+          )}
+        </nav>
+      )}
     </main>
   );
 }

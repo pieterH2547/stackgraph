@@ -13,8 +13,16 @@ name: Generation 0 · plan
 on:
   workflow_dispatch:
     inputs:
+      intake:
+        description: "recommended = the ICP cohort · all = everything not excluded"
+        required: true
+        type: choice
+        default: recommended
+        options:
+          - recommended
+          - all
       limit:
-        description: "How many recommended profiles to plan for (0 = all)"
+        description: "How many profiles to plan for (0 = the whole intake)"
         required: true
         default: "200"
       enrich_top:
@@ -69,11 +77,17 @@ jobs:
 
       # The list, in full, in the log. This is what approval is given against.
       - name: What a write would create
-        run: npm run launchllama:import -- --limit=${{ inputs.limit }}
+        run: |
+          npm run launchllama:import -- \
+            ${{ inputs.intake == 'all' && '--all' || '' }} \
+            --limit=${{ inputs.limit }}
 
       - name: Fingerprint the plan
         id: fingerprint
-        run: npx tsx scripts/plan-summary.ts >> "$GITHUB_OUTPUT"
+        run: |
+          npx tsx scripts/plan-summary.ts \
+            data/launchllama-stackgraph-review.csv \
+            ${{ inputs.intake == 'all' && '--all' || '' }} >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -86,7 +100,9 @@ jobs:
           {
             echo "### Generation 0 plan"
             echo
-            echo "- recommended: **${{ steps.fingerprint.outputs.recommended }}**"
+            echo "- intake: **${{ inputs.intake }}**"
+            echo "- recommended (ICP cohort): ${{ steps.fingerprint.outputs.recommended }}"
+            echo "- importable (not excluded): ${{ steps.fingerprint.outputs.importable }}"
             echo "- plan checksum: \`${{ steps.fingerprint.outputs.checksum }}\`"
             echo "- limit asked for: ${{ inputs.limit }}"
             echo
@@ -94,6 +110,7 @@ jobs:
             echo
             echo "Actions → *Generation 0 · apply* → Run workflow"
             echo "  plan_run_id: \`${{ github.run_id }}\`"
+            echo "  intake: \`${{ inputs.intake }}\`"
             echo "  confirm: \`yes\`"
             echo
             echo "Nothing was written by this run."

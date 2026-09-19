@@ -3,6 +3,7 @@ import { getDb } from "./client";
 import { newId, newToken, nowIso } from "../ids";
 import { assessEligibility } from "../eligibility";
 import { uniqueSlug } from "../slug";
+import { SOURCED_BY_US } from "../types";
 import type {
   Company,
   CompanySource,
@@ -825,10 +826,13 @@ export async function listCategoryCounts(): Promise<
  * One category, most connected first. Connections are the ordering because
  * they are the only thing here worth ranking on — and it is a count of what
  * companies said, not a score of ours.
+ *
+ * Paged, because a category holds hundreds of profiles now rather than one.
  */
 export async function listCompaniesInCategory(
   category: string,
   limit = 60,
+  offset = 0,
 ): Promise<CompanyWithCounts[]> {
   const { rows } = await getDb().execute({
     sql: `SELECT ${prefixedColumns("c")},
@@ -838,10 +842,112 @@ export async function listCompaniesInCategory(
      FROM companies c
      WHERE c.category = ?
      ORDER BY incoming DESC, outgoing DESC, c.name ASC
-     LIMIT ?`,
-    args: [category, limit],
+     LIMIT ? OFFSET ?`,
+    args: [category, limit, offset],
   });
   return rows.map(mapCompanyWithCounts);
+}
+
+export async function countCompaniesInCategory(
+  category: string,
+): Promise<number> {
+  const { rows } = await getDb().execute({
+    sql: `SELECT COUNT(*) AS total FROM companies WHERE category = ?`,
+    args: [category],
+  });
+  return Number((rows[0] as Record<string, unknown> | undefined)?.total ?? 0);
+}
+
+/* -------------------------------------------------------------------------- */
+/* the network page                                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Four groups, each bounded.
+ *
+ * This was one unbounded list back when the whole graph fitted on a screen.
+ * It no longer does, and the distinction that list was flattening is the one
+ * thing the MVP exists to measure: a profile that exists because another
+ * company named it is evidence the flywheel turns, and a profile we imported
+ * from a directory is the floor that evidence is measured against. Counting
+ * them together would let the floor pass for the result.
+ */
+async function listNetworkGroup(
+  where: string,
+  args: (string | number)[],
+  limit: number,
+): Promise<CompanyWithCounts[]> {
+  const { rows } = await getDb().execute({
+    sql: `SELECT ${prefixedColumns("c")},
+       (SELECT COUNT(*) FROM relationships r WHERE r.source_company_id = c.id) AS outgoing,
+       (SELECT COUNT(*) FROM relationships r WHERE r.target_company_id = c.id) AS incoming,
+       0 AS notifications
+     FROM companies c
+     WHERE ${where}
+     ORDER BY incoming DESC, c.created_at DESC
+     LIMIT ?`,
+    args: [...args, limit],
+  });
+  return rows.map(mapCompanyWithCounts);
+}
+
+const SOURCED_PLACEHOLDERS = SOURCED_BY_US.map(() => "?").join(", ");
+
+/** Claimed, whoever put them here first. */
+export function listClaimedCompanies(limit = 60) {
+  return listNetworkGroup("c.status = 'CLAIMED'", [], limit);
+}
+
+/** Unclaimed, and here because another company named them. */
+export function listCreditedCompanies(limit = 60) {
+  return listNetworkGroup(
+    `c.status != 'CLAIMED' AND c.network_eligible = 1
+       AND c.source NOT IN (${SOURCED_PLACEHOLDERS})`,
+    [...SOURCED_BY_US],
+    limit,
+  );
+}
+
+/** Unclaimed, and here because we imported them. */
+export function listSourcedCompanies(limit = 24) {
+  return listNetworkGroup(
+    `c.status != 'CLAIMED' AND c.network_eligible = 1
+       AND c.source IN (${SOURCED_PLACEHOLDERS})`,
+    [...SOURCED_BY_US],
+    limit,
+  );
+}
+
+/** In the graph as stack data, outside the network. */
+export function listIncumbentCompanies(limit = 60) {
+  return listNetworkGroup("c.network_eligible = 0", [], limit);
+}
+
+/** How the companies table splits across those same four groups. */
+export async function getNetworkGroupCounts(): Promise<{
+  claimed: number;
+  credited: number;
+  sourced: number;
+  incumbents: number;
+}> {
+  const { rows } = await getDb().execute({
+    sql: `SELECT
+       SUM(CASE WHEN status = 'CLAIMED' THEN 1 ELSE 0 END) AS claimed,
+       SUM(CASE WHEN status != 'CLAIMED' AND network_eligible = 1
+                 AND source NOT IN (${SOURCED_PLACEHOLDERS}) THEN 1 ELSE 0 END) AS credited,
+       SUM(CASE WHEN status != 'CLAIMED' AND network_eligible = 1
+                 AND source IN (${SOURCED_PLACEHOLDERS}) THEN 1 ELSE 0 END) AS sourced,
+       SUM(CASE WHEN network_eligible = 0 THEN 1 ELSE 0 END) AS incumbents
+     FROM companies`,
+    args: [...SOURCED_BY_US, ...SOURCED_BY_US],
+  });
+  const row = (rows[0] ?? {}) as Record<string, unknown>;
+  return {
+    claimed: Number(row.claimed ?? 0),
+    credited: Number(row.credited ?? 0),
+    sourced: Number(row.sourced ?? 0),
+    incumbents: Number(row.incumbents ?? 0),
+  };
 }
 
 export async function listCompaniesWithCounts(): Promise<CompanyWithCounts[]> {

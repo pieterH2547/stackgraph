@@ -346,3 +346,31 @@ describe("a company without a domain of its own", () => {
     }
   });
 });
+
+describe("the logo carried through from the export", () => {
+  it("takes an icon URL under whatever the export calls the column", () => {
+    const icon = "https://quietdesk.io/icon.svg";
+    expect(score({ ...GOOD, logo_url: icon }).logoUrl).toBe(icon);
+    expect(score({ ...GOOD, Icon: icon }).logoUrl).toBe(icon);
+    expect(score({ ...GOOD, "Image URL": icon }).logoUrl).toBe(icon);
+  });
+
+  it("refuses anything that is not an http URL", () => {
+    // A relative path, a data URI or a stray word would each render as a
+    // broken image on a profile nobody has claimed yet, which is worse than
+    // the monogram it would otherwise have shown.
+    for (const value of ["/icon.svg", "data:image/png;base64,iVBOR", "none", ""]) {
+      expect(score({ ...GOOD, logo_url: value }).logoUrl, value).toBe("");
+    }
+  });
+
+  it("does not let the icon column influence the rubric", () => {
+    // The icon is a URL full of words. It must not be read as evidence.
+    const withIcon = score({
+      ...GOOD,
+      logo_url: "https://cdn.example.com/crypto-token-agency-consulting.png",
+    });
+    expect(withIcon.exclusionReason).toBe("");
+    expect(withIcon.icpScore).toBe(score(GOOD).icpScore);
+  });
+});

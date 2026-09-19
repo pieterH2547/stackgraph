@@ -3,6 +3,15 @@
  *
  *   npm run launchllama:import -- --dry-run --limit=100
  *   npm run launchllama:import -- --write --local --limit=100
+ *   npm run launchllama:import -- --all --write --local
+ *
+ * `--all` widens the intake from the ICP cohort to the whole directory minus
+ * what the review file excluded outright. The rubric is still what decides
+ * *outreach* — who is worth a mention converting — but a graph you can browse
+ * needs more than 136 profiles in it, and a row scoring 2/6 is usually a row
+ * whose site we never read, not a row we judged and rejected. What stays out
+ * is what was excluded for cause: dead sites, directories, crypto projects,
+ * agencies and anything without a domain of its own.
  *
  * and only ever deliberately:
  *
@@ -14,7 +23,7 @@
  * - write anything without --write (dry run is the default)
  * - touch a remote database without --remote AND
  *   --confirm-whouseswhat-production, both spelled out
- * - import a row the review file didn't recommend
+ * - import a row the review file excluded for cause
  * - create a single relationship
  * - mark anything CLAIMED
  * - send any email or notification
@@ -36,6 +45,7 @@ const DEFAULT_IN = "data/launchllama-stackgraph-review.csv";
 interface Options {
   in: string;
   limit: number;
+  all: boolean;
   write: boolean;
   local: boolean;
   remote: boolean;
@@ -51,6 +61,7 @@ function parseArgs(argv: string[]): Options {
   return {
     in: flags.get("in") ?? DEFAULT_IN,
     limit: Number(flags.get("limit") ?? 0) || 0,
+    all: flags.get("all") === "true",
     // Dry run is not a flag you have to remember; writing is.
     write: flags.get("write") === "true",
     local: flags.get("local") === "true",
@@ -118,23 +129,45 @@ interface Row {
   domain: string;
   description: string;
   category: string;
+  logoUrl: string;
   audience: string;
   score: string;
 }
 
-function readRows(csv: string): Row[] {
+/**
+ * Two intakes, one file. The default is the recommended cohort; `--all` is
+ * everything the review file did not exclude for cause. An empty
+ * `exclusion_reason` is the test in that case, never a low score: the score
+ * says how much we know, and for most rows the answer is "we never looked".
+ */
+function readRows(csv: string, all: boolean): Row[] {
   return parseCsv(csv)
-    .filter((row) => row.import_recommended?.toLowerCase() === "true")
+    .filter((row) =>
+      all
+        ? !(row.exclusion_reason ?? "").trim()
+        : row.import_recommended?.toLowerCase() === "true",
+    )
     .map((row) => ({
       name: (row.name ?? "").trim(),
       website: (row.website ?? "").trim(),
       domain: (row.domain ?? "").trim(),
       description: (row.description ?? "").trim(),
       category: (row.category ?? "").trim(),
+      logoUrl: (row.logo_url ?? "").trim(),
       // Only carried through when the review file genuinely has one.
       audience: (row.audience ?? "").trim(),
       score: (row.icp_score ?? "").trim(),
     }));
+}
+
+/**
+ * A profile with no category cannot be browsed to, and browsing is most of
+ * what an unclaimed profile is for. `Other` is an honest answer where a guess
+ * would not be: the category mapper stays deliberately blunt, and whoever
+ * claims the company picks the right one.
+ */
+function categoryOf(row: Row): string {
+  return row.category || "Other";
 }
 
 /**
@@ -157,10 +190,11 @@ async function main() {
   const url = resolvedDatabaseUrl();
   assertTargetAllowed(options, url);
 
-  const rows = readRows(await readFile(options.in, "utf8"));
+  const rows = readRows(await readFile(options.in, "utf8"), options.all);
   const wanted = options.limit ? rows.slice(0, options.limit) : rows;
   console.log(
-    `Recommended in ${options.in}: ${rows.length}. Taking ${wanted.length}.\n`,
+    `${options.all ? "Not excluded" : "Recommended"} in ${options.in}: ` +
+      `${rows.length}. Taking ${wanted.length}.\n`,
   );
 
   if (options.write) await ensureSchema();
@@ -190,9 +224,8 @@ async function main() {
        */
       const patch = {
         ...(existing.description || !description ? {} : { description }),
-        ...(existing.category || !row.category
-          ? {}
-          : { category: row.category }),
+        ...(existing.category ? {} : { category: categoryOf(row) }),
+        ...(existing.logoUrl || !row.logoUrl ? {} : { logoUrl: row.logoUrl }),
         ...(existing.audience || !row.audience
           ? {}
           : { audience: row.audience }),
@@ -227,7 +260,8 @@ async function main() {
       domain: site.domain,
       website: site.website,
       description: description || null,
-      category: row.category || null,
+      category: categoryOf(row),
+      logoUrl: row.logoUrl || null,
       audience: row.audience || null,
       source: "LAUNCHLLAMA",
       status: "UNCLAIMED",
@@ -249,7 +283,9 @@ async function main() {
 
   if (!options.write) {
     console.log(
-      "\nTo write locally:  npm run launchllama:import -- --write --local" +
+      "\nTo write locally:  npm run launchllama:import --" +
+        (options.all ? " --all" : "") +
+        " --write --local" +
         (options.limit ? ` --limit=${options.limit}` : ""),
     );
   }
