@@ -702,10 +702,15 @@ export async function listGrowingNetworks(
   }));
 }
 
+/**
+ * Typeahead, for the stack editor and for the homepage lookup. Both want the
+ * same order — the thing you meant, first — so both get the same one: exact
+ * name, then a company with edges to look at, then a claimed profile.
+ */
 export async function searchCompanies(
   query: string,
   options: { limit?: number; excludeIds?: string[] } = {},
-): Promise<Company[]> {
+): Promise<CompanyWithCounts[]> {
   const q = query.trim().toLowerCase();
   if (q.length < 1) return [];
 
@@ -714,19 +719,21 @@ export async function searchCompanies(
   const placeholders = exclude.map(() => "?").join(", ");
 
   const { rows } = await getDb().execute({
-    sql: `SELECT ${COMPANY_COLUMNS} FROM companies
-          WHERE (LOWER(name) LIKE ? OR domain LIKE ?)
-          ${exclude.length ? `AND id NOT IN (${placeholders})` : ""}
+    sql: `SELECT ${prefixedColumns("c")}, ${EDGE_COUNTS}
+          FROM companies c
+          WHERE (LOWER(c.name) LIKE ? OR c.domain LIKE ?)
+          ${exclude.length ? `AND c.id NOT IN (${placeholders})` : ""}
           ORDER BY
-            CASE WHEN LOWER(name) = ? THEN 0
-                 WHEN LOWER(name) LIKE ? THEN 1
+            CASE WHEN LOWER(c.name) = ? THEN 0
+                 WHEN LOWER(c.name) LIKE ? THEN 1
                  ELSE 2 END,
-            CASE WHEN status = 'CLAIMED' THEN 0 ELSE 1 END,
-            name ASC
+            CASE WHEN incoming + outgoing > 0 THEN 0 ELSE 1 END,
+            CASE WHEN c.status = 'CLAIMED' THEN 0 ELSE 1 END,
+            c.name ASC
           LIMIT ?`,
     args: [`%${q}%`, `%${q}%`, ...exclude, q, `${q}%`, limit],
   });
-  return rows.map(mapCompany);
+  return rows.map(mapCompanyWithCounts);
 }
 
 export interface NetworkStats {
@@ -777,8 +784,27 @@ function mapCompanyWithCounts(row: Row): CompanyWithCounts {
 }
 
 /**
+ * The two counts every list surface shows, as one subquery pair.
+ *
+ * A DISPUTED edge is excluded from both. It is still a stored row — the
+ * vendor's rejection is a fact worth keeping — but it has been withdrawn from
+ * the public graph, and a card that keeps counting it would be quietly showing
+ * a connection the site itself no longer displays.
+ */
+const EDGE_COUNTS = `
+   (SELECT COUNT(*) FROM relationships r
+     WHERE r.source_company_id = c.id AND r.state != 'DISPUTED') AS outgoing,
+   (SELECT COUNT(*) FROM relationships r
+     WHERE r.target_company_id = c.id AND r.state != 'DISPUTED') AS incoming`;
+
+/**
  * Public search. Wider than the typeahead the stack editor uses: a visitor
  * looking up a company wants everything that matches, not the best six.
+ *
+ * The ordering is the answer to "which of these did they mean": the exact
+ * name, then a company with connections to look at, then a claimed profile,
+ * then everything else. A company with no edges is still a valid result —
+ * most of the graph has none — it just does not come first.
  */
 export async function findCompanies(
   query: string,
@@ -789,9 +815,7 @@ export async function findCompanies(
   const like = `%${q}%`;
 
   const { rows } = await getDb().execute({
-    sql: `SELECT ${prefixedColumns("c")},
-       (SELECT COUNT(*) FROM relationships r WHERE r.source_company_id = c.id) AS outgoing,
-       (SELECT COUNT(*) FROM relationships r WHERE r.target_company_id = c.id) AS incoming,
+    sql: `SELECT ${prefixedColumns("c")}, ${EDGE_COUNTS},
        0 AS notifications
      FROM companies c
      WHERE LOWER(c.name) LIKE ? OR c.domain LIKE ? OR LOWER(c.description) LIKE ?
@@ -799,12 +823,59 @@ export async function findCompanies(
        CASE WHEN LOWER(c.name) = ? THEN 0
             WHEN LOWER(c.name) LIKE ? THEN 1
             ELSE 2 END,
+       CASE WHEN incoming + outgoing > 0 THEN 0 ELSE 1 END,
+       CASE WHEN c.status = 'CLAIMED' THEN 0 ELSE 1 END,
        incoming DESC, outgoing DESC, c.name ASC
      LIMIT ?`,
     args: [like, like, like, q, `${q}%`, limit],
   });
 
   return rows.map(mapCompanyWithCounts);
+}
+
+/**
+ * Companies with something to look at: at least one edge, either direction.
+ *
+ * This is what the homepage needs to demonstrate the product rather than
+ * describe it. It cannot return an empty profile, because the WHERE clause is
+ * the edges themselves — there is no "featured" flag to accidentally promote a
+ * company that has never connected to anything.
+ */
+export async function listConnectedCompanies(
+  limit = 6,
+): Promise<CompanyWithCounts[]> {
+  const { rows } = await getDb().execute({
+    sql: `SELECT ${prefixedColumns("c")}, ${EDGE_COUNTS},
+       0 AS notifications
+     FROM companies c
+     WHERE c.network_eligible = 1
+       AND (incoming > 0 OR outgoing > 0)
+     ORDER BY incoming + outgoing DESC, incoming DESC, c.updated_at DESC
+     LIMIT ?`,
+    args: [limit],
+  });
+
+  return rows.map(mapCompanyWithCounts);
+}
+
+/** Both directions for one company, as the profile and its metadata state it. */
+export async function getEdgeCounts(
+  companyId: string,
+): Promise<{ incoming: number; outgoing: number }> {
+  const { rows } = await getDb().execute({
+    sql: `SELECT
+       SUM(CASE WHEN target_company_id = ? THEN 1 ELSE 0 END) AS incoming,
+       SUM(CASE WHEN source_company_id = ? THEN 1 ELSE 0 END) AS outgoing
+     FROM relationships
+     WHERE (target_company_id = ? OR source_company_id = ?)
+       AND state != 'DISPUTED'`,
+    args: [companyId, companyId, companyId, companyId],
+  });
+  const row = (rows[0] ?? {}) as Record<string, unknown>;
+  return {
+    incoming: Number(row.incoming ?? 0),
+    outgoing: Number(row.outgoing ?? 0),
+  };
 }
 
 /** Every category in use, with how many companies sit in it. */
@@ -836,8 +907,7 @@ export async function listCompaniesInCategory(
 ): Promise<CompanyWithCounts[]> {
   const { rows } = await getDb().execute({
     sql: `SELECT ${prefixedColumns("c")},
-       (SELECT COUNT(*) FROM relationships r WHERE r.source_company_id = c.id) AS outgoing,
-       (SELECT COUNT(*) FROM relationships r WHERE r.target_company_id = c.id) AS incoming,
+${EDGE_COUNTS},
        0 AS notifications
      FROM companies c
      WHERE c.category = ?
@@ -879,8 +949,7 @@ async function listNetworkGroup(
 ): Promise<CompanyWithCounts[]> {
   const { rows } = await getDb().execute({
     sql: `SELECT ${prefixedColumns("c")},
-       (SELECT COUNT(*) FROM relationships r WHERE r.source_company_id = c.id) AS outgoing,
-       (SELECT COUNT(*) FROM relationships r WHERE r.target_company_id = c.id) AS incoming,
+${EDGE_COUNTS},
        0 AS notifications
      FROM companies c
      WHERE ${where}

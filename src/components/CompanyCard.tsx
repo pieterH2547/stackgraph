@@ -7,10 +7,14 @@ import type { Company } from "@/lib/types";
 export function CompanyCard({
   company,
   usedBy,
+  uses,
   note,
 }: {
   company: Company;
+  /** Inbound edges. A zero is left off rather than printed as "00". */
   usedBy?: number;
+  /** Outbound edges — the other half of what this product knows. */
+  uses?: number;
   /** Short mono line under the description, e.g. "+3 this week". */
   note?: string;
 }) {
@@ -36,6 +40,9 @@ export function CompanyCard({
           {note && <span className="mono text-accent-ink">{note}</span>}
           {usedBy !== undefined && usedBy > 0 && (
             <MonoCount label="Used by" value={padCount(usedBy)} />
+          )}
+          {uses !== undefined && uses > 0 && (
+            <MonoCount label="Uses" value={padCount(uses)} />
           )}
           {company.category && (
             <span className="mono text-ink-3">{company.category}</span>

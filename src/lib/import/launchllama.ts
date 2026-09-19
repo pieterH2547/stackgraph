@@ -214,6 +214,37 @@ const EXCLUSIONS: { reason: string; patterns: RegExp }[] = [
 const FREE_HOST =
   /\.(github\.io|gitlab\.io|vercel\.app|netlify\.app|pages\.dev|web\.app|firebaseapp\.com|herokuapp\.com|streamlit\.app|replit\.app|glitch\.me|notion\.site|carrd\.co|framer\.website|webflow\.io|wixsite\.com|substack\.com|gumroad\.com)$/i;
 
+/**
+ * A listing that links to a page rather than to a site.
+ *
+ * A company's identity here *is* its domain, and normalizing a URL to its
+ * registrable domain throws the path away. So a directory row pointing at
+ * `tally.so/r/MevyAE` — a form somebody built on Tally — became a profile
+ * owning `tally.so`, and a search for Tally returned that form. The same shape
+ * turned launch posts into companies: `anthropic.com/news/claude-opus-4-6`,
+ * `figma.com/blog/...`, `blog.google/...`.
+ *
+ * The honest reading is that we do not know this company's domain. A row that
+ * cannot name its own homepage is unusable for the same reason as one with no
+ * domain of its own, and whoever owns the product can still claim it properly
+ * later. A trailing slash, `/en`, `/home` and the like are not paths in this
+ * sense: they are the homepage with decoration.
+ */
+const HOMEPAGE_PATH = /^\/(?:[a-z]{2}(?:-[a-z]{2})?|home|index(?:\.html?|\.php)?)?\/?$/i;
+
+export function linksToAPage(rawWebsite: string): boolean {
+  const input = rawWebsite.trim();
+  if (!input) return false;
+  try {
+    const { pathname } = new URL(
+      /^https?:\/\//i.test(input) ? input : `https://${input}`,
+    );
+    return !HOMEPAGE_PATH.test(pathname);
+  } catch {
+    return false;
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* signals                                                                    */
 /* -------------------------------------------------------------------------- */
@@ -334,6 +365,9 @@ export function scoreRecord(
   }
   if (!exclusionReason && site && FREE_HOST.test(site.domain)) {
     exclusionReason = "no domain of its own";
+  }
+  if (!exclusionReason && site && linksToAPage(rawWebsite)) {
+    exclusionReason = "links to a page, not a company site";
   }
   if (!exclusionReason && options.enriched?.reachable === false) {
     exclusionReason = "site did not respond";

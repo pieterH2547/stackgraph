@@ -9,8 +9,10 @@
  * 1. "Independent software" is the *category*, never the brand. Naming the
  *    product after smallness tells people they are smaller than they think
  *    they are.
- * 2. The hero answers "what do I get", not "what do we believe". The belief
- *    belongs in the manifesto; the hero has to be a reason to claim.
+ * 2. The hero asks the product's question and hands you the field to answer
+ *    it with. Not what we believe — that belongs in the manifesto — and no
+ *    longer a pitch to claim either: claiming is one reader in a thousand,
+ *    and "who uses this?" is why the other nine hundred came.
  */
 export const brand = {
   /*
@@ -27,18 +29,26 @@ export const brand = {
   category: "the independent software graph",
 
   /* --- hero: what's in it for the visitor ------------------------------- */
-  heroHeadline: "Find out who uses your software.",
+  /*
+   * The hero used to sell claiming, which is the second thing a visitor wants
+   * and only if they happen to own a company. The first thing is the question
+   * on the tin, and it is answerable in one field without an account — so the
+   * headline is the question now, and the field is the hero.
+   */
+  heroHeadline: "Who uses what?",
   heroSubline:
-    "Who Uses What maps which independent software companies run on which. Claim your company to see who uses your product — and to credit the tools that power you.",
-  /** Dry qualifier under the hero CTA. */
+    "See which software companies use which tools — and what runs on them.",
+  searchPlaceholder: "Search a software company…",
+  /** Dry qualifier under the hero search. */
   heroAside: "No rankings. No sales deck. Just who uses what.",
+  /** Clickable examples under the field. Real lookups, not decoration. */
+  searchExamples: ["Recruit CRM", "PostHog", "Tally", "Vercel", "Stripe"],
 
   /* --- calls to action -------------------------------------------------- */
   // "Add" was the wrong verb: adding a profile claims nothing, and half the
   // companies people look for already have one waiting.
   ctaPrimary: "Claim your company",
   ctaClaim: "Claim your profile",
-  ctaSeeWhoUsesYou: "See who uses you",
 
   /** The two sides of every profile. */
   poweredBy: "Powered by",

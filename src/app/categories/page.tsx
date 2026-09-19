@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { SiteSearch } from "@/components/SiteSearch";
+import { CompanyLookup } from "@/components/CompanyLookup";
 import { brand } from "@/lib/brand";
 import { listCategoryCounts } from "@/lib/db/queries";
 import { padCount } from "@/lib/format";
@@ -44,7 +44,7 @@ export default async function CategoriesPage() {
       </p>
 
       <div className="mt-7 max-w-xl">
-        <SiteSearch />
+        <CompanyLookup size="md" placeholder={brand.searchPlaceholder} />
       </div>
 
       {categories.length === 0 ? (

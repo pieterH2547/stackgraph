@@ -23,8 +23,10 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL(absoluteUrl("/")),
   title: {
-    default: `${brand.name} — ${brand.heroHeadline}`,
-    template: `%s · ${brand.name}`,
+    // Not heroHeadline: that is the literal question "Who uses what?" now,
+    // which next to the product name reads as a stutter.
+    default: `${brand.name} — ${brand.category}`,
+    template: `%s | ${brand.name}`,
   },
   description: brand.heroSubline,
   openGraph: { siteName: brand.name, type: "website" },

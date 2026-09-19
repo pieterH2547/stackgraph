@@ -347,6 +347,42 @@ describe("a company without a domain of its own", () => {
   });
 });
 
+describe("a listing that links to a page rather than a site", () => {
+  it("is excluded, because the row cannot name its own domain", () => {
+    // Every one of these is real: a form built on Tally, and launch posts.
+    for (const website of [
+      "https://tally.so/r/MevyAE",
+      "https://www.anthropic.com/news/claude-opus-4-6",
+      "https://www.figma.com/blog/the-figma-canvas-is-now-open",
+      "https://blog.google/innovation-and-ai/models-and-research/",
+    ]) {
+      const row = score({
+        Name: "Thing",
+        Website: website,
+        Description: "Async standup software for remote teams.",
+      });
+      expect(row.exclusionReason, website).toBe(
+        "links to a page, not a company site",
+      );
+      expect(row.importRecommended).toBe(false);
+    }
+  });
+
+  it("still accepts a homepage, however it is spelled", () => {
+    for (const website of [
+      "https://quietdesk.io",
+      "https://quietdesk.io/",
+      "quietdesk.io",
+      "https://www.quietdesk.io/en",
+      "https://quietdesk.io/index.html",
+    ]) {
+      const row = score({ ...GOOD, Website: website });
+      expect(row.exclusionReason, website).toBe("");
+      expect(row.domain, website).toBe("quietdesk.io");
+    }
+  });
+});
+
 describe("the logo carried through from the export", () => {
   it("takes an icon URL under whatever the export calls the column", () => {
     const icon = "https://quietdesk.io/icon.svg";

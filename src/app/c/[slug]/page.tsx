@@ -9,7 +9,11 @@ import { ShareRow } from "@/components/ShareRow";
 import { disputeRelationship, trackShare } from "@/actions/stack";
 import { brand } from "@/lib/brand";
 import { companiesCount, companiesSay, padCount, timeAgo } from "@/lib/format";
-import { countIncomingOnNetwork, getCompanyBySlug } from "@/lib/db/queries";
+import {
+  countIncomingOnNetwork,
+  getCompanyBySlug,
+  getEdgeCounts,
+} from "@/lib/db/queries";
 import { getProfile } from "@/lib/network";
 import { canEdit } from "@/lib/session";
 import { canManage } from "@/lib/auth/session";
@@ -20,6 +24,14 @@ import { absoluteUrl } from "@/lib/url";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * The title is the question when, and only when, the page can answer it.
+ *
+ * "Who uses X?" on a profile with no inbound edges is a promise the page does
+ * not keep, and a few thousand of those is a doorway-page farm. So the shape
+ * of the title is decided by the data: the question for a company somebody
+ * actually credits, the plain name otherwise.
+ */
 export async function generateMetadata({
   params,
 }: PageProps<"/c/[slug]">): Promise<Metadata> {
@@ -27,16 +39,31 @@ export async function generateMetadata({
   const company = await getCompanyBySlug(slug);
   if (!company) return { title: "Not found" };
 
+  const { incoming, outgoing } = await getEdgeCounts(company.id);
+
+  const title =
+    incoming > 0
+      ? `Who uses ${company.name}?`
+      : outgoing > 0
+        ? `What ${company.name} runs on`
+        : company.name;
+
   const description =
-    company.description ??
-    `The independent tools powering ${company.name}, and the software companies that use it.`;
+    incoming > 0 && outgoing > 0
+      ? `${companiesCount(incoming)} on ${brand.name} say they use ${company.name}, and ${company.name} credits ${outgoing} ${outgoing === 1 ? "tool" : "tools"}.`
+      : incoming > 0
+        ? `${companiesCount(incoming)} on ${brand.name} say they use ${company.name}. See who.`
+        : outgoing > 0
+          ? `The ${outgoing === 1 ? "tool" : `${outgoing} tools`} ${company.name} says it runs on.`
+          : (company.description ??
+            `${company.name} on ${brand.name}: the tools it runs on, and the companies that run on it.`);
 
   return {
-    title: company.name,
+    title,
     description,
     alternates: { canonical: `/c/${company.slug}` },
     openGraph: {
-      title: `${company.name} · ${brand.name}`,
+      title: `${title} · ${brand.name}`,
       description,
       url: absoluteUrl(`/c/${company.slug}`),
     },
@@ -53,10 +80,16 @@ export async function generateMetadata({
  *
  *   1. what is this company
  *   2. who says they use it          <- the strongest thing on the page
- *   3. why claim it, if unclaimed
- *   4. what powers it
+ *   3. what it says it uses
+ *   4. why claim it, if unclaimed
  *   5. the graph around it
  *   6. where all of this came from
+ *
+ * Both relationship blocks are public, on every profile, claimed or not. They
+ * used to be withheld from an unclaimed vendor as the reason to claim, which
+ * made the page worth less to the visitor the less the vendor had done — and
+ * a graph nobody can read is not a graph. Claiming now buys control: correct
+ * the profile, name your own stack, dispute an edge, hear about the next one.
  *
  * Three states must never be visually confused, so each has its own wording:
  * a relationship is "X says it uses Y"; imported identity is "sourced from
@@ -82,9 +115,6 @@ export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
   const claimed = company.status === "CLAIMED";
   const connections = incoming.length + outgoing.length;
   const about = aboutBeyondTagline(company.about, company.description);
-  // Progressive unlock: an unclaimed vendor sees how many companies name them
-  // and how many are on the network, but not who. That's the reason to claim.
-  const revealed = claimed || mine;
   const spotted = claimed ? [] : (company.detectedStack ?? []);
 
   return (
@@ -206,21 +236,20 @@ export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
         </section>
       )}
 
-      {/* 2 + 3 — the proof, and the reason to claim it */}
+      {/* 2 — the proof, and the strongest thing on the page */}
       <UsedBy
         company={company}
         incoming={incoming}
         usedByCount={usedByCount}
         onNetwork={onNetwork}
-        revealed={revealed}
         mine={mine}
       />
 
-      {/* 4 — what powers it, or what we merely suspect powers it */}
+      {/* 3 — what powers it, or what we merely suspect powers it */}
       {outgoing.length > 0 ? (
         <section className="mt-14">
           <SectionHead
-            title={brand.poweredBy}
+            title={`${company.name} uses ${outgoing.length} ${outgoing.length === 1 ? "tool" : "tools"}`}
             aside={
               <span className="mono text-ink-3">
                 {company.name}&apos;s own words
@@ -248,16 +277,17 @@ export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
           slug={company.slug}
           tools={spotted}
         />
-      ) : claimed ? (
+      ) : (
         <p className="mono mt-14 text-ink-3">
           {company.name} hasn’t named its own tools yet.
         </p>
-      ) : null}
+      )}
+
+      {/* 4 — why claim it, for a profile nobody there has claimed */}
+      {!claimed && !mine && <ClaimInvite company={company} />}
 
       {/* 5 — the graph, once there is something to draw */}
-      {revealed && (
-        <LocalGraph company={company} incoming={incoming} outgoing={outgoing} />
-      )}
+      <LocalGraph company={company} incoming={incoming} outgoing={outgoing} />
 
       {/* 6 — provenance, stated plainly and without a wall of legal copy */}
       <footer className="mt-16 border-t border-line pt-7">
@@ -293,26 +323,26 @@ export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
 }
 
 /**
- * The strongest block on the page, and the one the vendor never wrote. Three
- * shapes, in order of how much they are worth:
+ * The strongest block on the page, and the one the vendor never wrote.
  *
- * - claimed, with users:   the names, each attributed
- * - unclaimed, with users: the count, and the names withheld until they claim
- * - nobody yet:            one quiet line, not a large empty box
+ * It shows the names to everybody. Hiding them behind a claim made the page
+ * useless to the person the graph is for — the visitor asking who uses this —
+ * in order to pressure the one person who probably was not looking at it.
+ *
+ * Two shapes now: the companies, or one quiet line when there are none. Never
+ * a large empty box, and never an implication that the vendor took part.
  */
 function UsedBy({
   company,
   incoming,
   usedByCount,
   onNetwork,
-  revealed,
   mine,
 }: {
   company: Company;
   incoming: RelationshipEdge[];
   usedByCount: number;
   onNetwork: number;
-  revealed: boolean;
   mine: boolean;
 }) {
   if (usedByCount === 0) {
@@ -321,49 +351,23 @@ function UsedBy({
         <p className="mono text-ink-3">
           No {brand.name} company has credited {company.name} yet.
         </p>
-        {company.status === "UNCLAIMED" && (
-          <p className="mt-4">
-            <Link href={routes.signInFor(company.slug)} className="btn btn-primary">
-              Claim this profile
-            </Link>
-          </p>
-        )}
-      </section>
-    );
-  }
-
-  if (!revealed) {
-    // The count is the valuable part, and withholding the names is the whole
-    // reason to claim. Nothing here implies the vendor participated.
-    return (
-      <section className="mt-12 border-l-2 border-accent pl-5 sm:pl-6">
-        <p className="label">{brand.usedBy}</p>
-        <p className="text-[clamp(1.375rem,3vw,1.875rem)] font-medium leading-tight tracking-[-0.02em]">
-          {companiesSay(usedByCount)} they use {company.name}.
-        </p>
-        {onNetwork > 0 && (
-          <p className="mt-2 text-ink-2">{onNetworkLine(onNetwork, usedByCount)}</p>
-        )}
-        <p className="mono mt-3 text-ink-3">
-          Claim {company.name} to see who. Nobody there has claimed this
-          profile, so nothing on it is a statement from them.
-        </p>
-        <div className="mt-5">
-          <Link href={routes.signInFor(company.slug)} className="btn btn-primary">
-            {brand.ctaSeeWhoUsesYou}
-          </Link>
-        </div>
       </section>
     );
   }
 
   return (
     <section className="mt-12">
-      <SectionHead
-        title={`${brand.usedBy} ${companiesCount(usedByCount)}`}
-        aside={<span className="mono text-ink-3">Each company’s own word</span>}
-      />
-      <div className="border-t border-line">
+      <p className="label">{brand.usedBy}</p>
+      <h2 className="text-[clamp(1.375rem,3vw,1.875rem)] font-medium leading-tight tracking-[-0.02em]">
+        {companiesSay(usedByCount)} they use {company.name}.
+      </h2>
+      {onNetwork > 0 && (
+        <p className="mono mt-2 text-ink-3">
+          {onNetworkLine(onNetwork, usedByCount)}
+        </p>
+      )}
+
+      <div className="mt-5 border-t border-line">
         {incoming.slice(0, 12).map((edge) => (
           <CompanyInline
             key={edge.id}
@@ -386,6 +390,50 @@ function UsedBy({
           + {padCount(incoming.length - 12)} more
         </p>
       )}
+    </section>
+  );
+}
+
+/**
+ * The claim pitch, for a profile nobody there has claimed. Lightweight on
+ * purpose: it sits below the relationships rather than in front of them,
+ * because it is an offer to one reader in a thousand and an obstacle to the
+ * rest. What it offers is control, not access — everything above is already
+ * visible to everyone.
+ */
+function ClaimInvite({ company }: { company: Company }) {
+  return (
+    <section className="mt-14 border-l-2 border-accent pl-5 sm:pl-6">
+      <h2 className="text-xl font-medium tracking-tight">
+        Is this your company?
+      </h2>
+      <p className="mt-2 max-w-lg leading-relaxed text-ink-2">
+        Nobody at {company.name} has claimed this profile, so nothing on it is
+        a statement from them. Claim it to:
+      </p>
+      <ul className="mono mt-3 space-y-1.5 text-ink-3">
+        {[
+          "confirm or correct your profile",
+          "add the tools your company uses",
+          "manage connections",
+          "get notified when another company credits your product",
+        ].map((line) => (
+          <li key={line} className="flex gap-2.5">
+            <span aria-hidden className="shrink-0">
+              ·
+            </span>
+            <span>{line}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-5">
+        <Link
+          href={routes.signInFor(company.slug)}
+          className="btn btn-primary"
+        >
+          {brand.ctaClaim}
+        </Link>
+      </div>
     </section>
   );
 }

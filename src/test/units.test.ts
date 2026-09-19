@@ -144,6 +144,9 @@ describe("formatting", () => {
   it("pads counts for the mono metadata style", () => {
     expect(padCount(4)).toBe("04");
     expect(padCount(14)).toBe("14");
+    // Grouped once the graph is big enough for the digits to run together.
+    expect(padCount(999)).toBe("999");
+    expect(padCount(3010)).toBe("3,010");
   });
 
   it("falls back to initials when a logo is missing", () => {

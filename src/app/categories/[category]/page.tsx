@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CompanyCard } from "@/components/CompanyCard";
-import { SiteSearch } from "@/components/SiteSearch";
+import { CompanyLookup } from "@/components/CompanyLookup";
 import { brand } from "@/lib/brand";
 import {
   countCompaniesInCategory,
@@ -75,7 +75,7 @@ export default async function CategoryPage({
       </p>
 
       <div className="mt-7 max-w-xl">
-        <SiteSearch />
+        <CompanyLookup size="md" placeholder={brand.searchPlaceholder} />
       </div>
 
       <div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

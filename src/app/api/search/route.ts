@@ -6,7 +6,11 @@ import { tryNormalizeSiteUrl } from "@/lib/url";
 export const dynamic = "force-dynamic";
 
 /**
- * Typeahead for the stack editor. Kept tiny: this has to feel instant.
+ * Typeahead, for two callers. Kept tiny: this has to feel instant.
+ *
+ * The stack editor picks a tool with it. The homepage lookup answers "who uses
+ * this?" with it, and shows the two edge counts in the dropdown so a visitor
+ * can tell an empty profile from a connected one before they click.
  *
  * It also answers whether a typed domain counts towards the independent tools
  * a claim costs, because the incumbent list lives on the server.
@@ -47,6 +51,8 @@ export async function GET(request: Request) {
       logoUrl: company.logoUrl,
       status: company.status,
       networkEligible: company.networkEligible,
+      usedBy: company.incoming,
+      uses: company.outgoing,
     })),
     typed,
   });

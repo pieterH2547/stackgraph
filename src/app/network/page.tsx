@@ -121,7 +121,7 @@ export default async function NetworkPage() {
                 ))}
               </Grid>
               <p className="mt-5 text-ink-2">
-                <Link href={routes.categories()} className="link">
+                <Link href={routes.categories()} className="link-sharp">
                   Browse all {totals.sourced.toLocaleString("en-GB")} by category
                 </Link>
               </p>

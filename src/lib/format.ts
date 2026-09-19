@@ -20,9 +20,16 @@ export function timeAgo(iso: string, now = Date.now()): string {
   return `${Math.round(months / 12)}y ago`;
 }
 
-/** Zero-padded counts for the mono metadata style: `USED BY 04`. */
+/**
+ * Counts for the mono metadata style: `USED BY 04`.
+ *
+ * Zero-padded below ten, and grouped above a thousand — the graph passed three
+ * thousand companies and `3010 COMPANIES` is a number you have to stop and
+ * parse.
+ */
 export function padCount(value: number): string {
-  return value < 10 ? `0${value}` : String(value);
+  if (value < 10) return `0${value}`;
+  return value.toLocaleString("en-GB");
 }
 
 export function initials(name: string): string {
