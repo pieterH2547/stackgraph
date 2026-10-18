@@ -242,9 +242,23 @@ CREATE TABLE IF NOT EXISTS sponsor_events (
 
 CREATE INDEX IF NOT EXISTS sponsor_events_sponsor_idx ON sponsor_events (sponsor_id, kind, created_at);
 CREATE INDEX IF NOT EXISTS sponsor_events_visitor_idx ON sponsor_events (sponsor_id, kind, visitor_key);
+
+-- The embeddable badge, measured the only way it can be measured honestly:
+-- one row per company per UTC day, two counters. No IP, no user agent, no
+-- referrer, no cookie — nothing that could identify the person or the site.
+-- "views" counts badge requests that reached the origin, so cached loads are
+-- missed on purpose; "clicks" counts arrivals on the profile via the badge.
+CREATE TABLE IF NOT EXISTS badge_stats (
+  company_id TEXT NOT NULL REFERENCES companies (id) ON DELETE CASCADE,
+  day        TEXT NOT NULL,
+  views      INTEGER NOT NULL DEFAULT 0,
+  clicks     INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (company_id, day)
+);
 `;
 
 export const TABLES = [
+  "badge_stats",
   "sponsor_events",
   "sponsors",
   "login_tokens",
