@@ -42,3 +42,28 @@ export function looksLikeTestRecord(
   if (PROBE_DOMAIN.test(domain ?? "")) return "domain";
   return null;
 }
+
+/**
+ * Is there anything on this profile for a reader to read?
+ *
+ * The test behind both the sitemap filter and the profile's own `robots`
+ * tag, so the two cannot disagree about which pages we are advertising.
+ *
+ * Deliberately generous. An imported profile carrying the vendor's own
+ * one-line description is a real company somebody may well be searching
+ * for, and being findable is the entire reason an unclaimed profile exists.
+ * The only thing this excludes is a page with a name on it and nothing else.
+ */
+export function hasSomethingToRead(
+  company: {
+    description?: string | null;
+    about?: string | null;
+    whatItDoes?: string[] | null;
+  },
+  edgeCount: number,
+): boolean {
+  if (edgeCount > 0) return true;
+  if ((company.description ?? "").trim() !== "") return true;
+  if ((company.about ?? "").trim() !== "") return true;
+  return (company.whatItDoes ?? []).length > 0;
+}

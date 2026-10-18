@@ -93,6 +93,43 @@ export interface AcquisitionFunnel {
   mentionedProfiles: number;
   /** Of those, the ones that have since claimed. The recursion. */
   followOnClaims: number;
+  /** How those follow-on claims got here. Sums to `followOnClaims`. */
+  attribution: FollowOnAttribution;
+}
+
+/**
+ * Why a credited profile came back — and whether we may take credit for it.
+ *
+ * A claim by a MENTIONED profile is the number the whole MVP is built to
+ * produce, which is exactly why it must not be read too generously. Two very
+ * different things look identical in the `companies` table: a founder who got
+ * our recognition email and followed the link, and a founder who heard about
+ * the site elsewhere, searched for their company and claimed the profile that
+ * happened to be waiting. The first is the flywheel. The second is demand we
+ * did not create, and counting it as flywheel would mean reporting a working
+ * loop that is not running.
+ *
+ * Three buckets, strongest evidence first, each company counted once:
+ *
+ *  - `clicked`  — a `claim_clicked` event for this company before it claimed.
+ *                 They came through our link; nothing else explains that URL.
+ *  - `invited`  — no click recorded, but a recognition email really left the
+ *                 building before they claimed (`claim_email_sent` with the
+ *                 `resend` transport). Weaker: they were reached, and may
+ *                 have typed the address rather than clicking.
+ *  - `organic`  — neither. Something brought them here and it was not us, or
+ *                 it was us by a route we do not measure.
+ *
+ * The `resend` test matters more than it looks. With `RESEND_API_KEY` unset —
+ * which is the deliberate production setting — every notification is still
+ * written with `status = 'SENT'`, over the `outbox` transport, meaning it was
+ * recorded and never delivered. Treating those as invitations would credit
+ * the loop with mail nobody received.
+ */
+export interface FollowOnAttribution {
+  clicked: number;
+  invited: number;
+  organic: number;
 }
 
 export async function getAcquisitionFunnel(): Promise<AcquisitionFunnel> {
@@ -129,7 +166,77 @@ export async function getAcquisitionFunnel(): Promise<AcquisitionFunnel> {
     outgoingCredits: Number(credits.rows[0]?.n ?? 0),
     mentionedProfiles: Number(mentioned.rows[0]?.total ?? 0),
     followOnClaims: Number(mentioned.rows[0]?.claimed ?? 0),
+    attribution: await attributeFollowOnClaims(),
   };
+}
+
+/**
+ * Classified in TypeScript rather than in SQL because the deciding fact —
+ * which transport carried the invitation — lives inside a JSON column, and a
+ * `LIKE '%resend%'` over somebody's props is not a measurement anyone should
+ * have to trust. The set being classified is the rarest thing in the
+ * database, so reading it row by row costs nothing.
+ */
+async function attributeFollowOnClaims(): Promise<FollowOnAttribution> {
+  const db = getDb();
+
+  const { rows: claimants } = await db.execute(
+    `SELECT id, claimed_at
+       FROM companies
+      WHERE source = 'MENTIONED' AND status = 'CLAIMED'`,
+  );
+
+  const attribution: FollowOnAttribution = {
+    clicked: 0,
+    invited: 0,
+    organic: 0,
+  };
+  if (claimants.length === 0) return attribution;
+
+  const { rows: events } = await db.execute(
+    `SELECT company_id, name, props, created_at
+       FROM events
+      WHERE name IN ('claim_clicked', 'claim_email_sent')`,
+  );
+
+  const clicks = new Map<string, string[]>();
+  const delivered = new Map<string, string[]>();
+
+  for (const row of events) {
+    const companyId = String(row.company_id ?? "");
+    if (!companyId) continue;
+    const at = String(row.created_at);
+
+    if (String(row.name) === "claim_clicked") {
+      clicks.set(companyId, [...(clicks.get(companyId) ?? []), at]);
+      continue;
+    }
+
+    // Only mail that actually left counts as having reached anyone.
+    let transport: unknown;
+    try {
+      transport = JSON.parse(String(row.props ?? "{}"))?.transport;
+    } catch {
+      transport = undefined;
+    }
+    if (transport === "resend") {
+      delivered.set(companyId, [...(delivered.get(companyId) ?? []), at]);
+    }
+  }
+
+  for (const row of claimants) {
+    const id = String(row.id);
+    // A claim with no timestamp cannot be ordered against anything, so the
+    // only honest reading is that we do not know what brought them.
+    const claimedAt = row.claimed_at ? String(row.claimed_at) : null;
+    const before = (at: string) => claimedAt === null || at <= claimedAt;
+
+    if ((clicks.get(id) ?? []).some(before)) attribution.clicked++;
+    else if ((delivered.get(id) ?? []).some(before)) attribution.invited++;
+    else attribution.organic++;
+  }
+
+  return attribution;
 }
 
 function median(values: number[]): number | null {

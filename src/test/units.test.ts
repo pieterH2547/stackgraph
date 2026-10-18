@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resetDatabase } from "./helpers";
 import { claimDomainMatches, isValidEmail } from "@/lib/claims";
-import { looksLikeTestRecord } from "@/lib/audit";
+import { hasSomethingToRead, looksLikeTestRecord } from "@/lib/audit";
 import { isDerivedName } from "@/lib/detect";
 import { assessEligibility } from "@/lib/eligibility";
 import { initials, padCount, timeAgo } from "@/lib/format";
@@ -390,5 +390,31 @@ describe("spotting a test record", () => {
     expect(looksLikeTestRecord("Nano Banana 2 Lite", "nanobanana2.com")).toBeNull();
     expect(looksLikeTestRecord("Krea 3", "krea.ai")).toBeNull();
     expect(looksLikeTestRecord("1Password", "1password.com")).toBeNull();
+  });
+});
+
+describe("whether a profile has anything to read", () => {
+  it("counts a description, an about or a stated capability", () => {
+    expect(hasSomethingToRead({ description: "Does a thing." }, 0)).toBe(true);
+    expect(hasSomethingToRead({ about: "We are three people in Ghent." }, 0)).toBe(
+      true,
+    );
+    expect(hasSomethingToRead({ whatItDoes: ["Transcribes video"] }, 0)).toBe(
+      true,
+    );
+  });
+
+  it("counts an edge even when the profile says nothing itself", () => {
+    expect(hasSomethingToRead({}, 1)).toBe(true);
+  });
+
+  it("is false only for a page with a name and nothing else", () => {
+    expect(hasSomethingToRead({}, 0)).toBe(false);
+    expect(
+      hasSomethingToRead(
+        { description: "   ", about: null, whatItDoes: [] },
+        0,
+      ),
+    ).toBe(false);
   });
 });

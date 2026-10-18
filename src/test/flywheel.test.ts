@@ -34,6 +34,7 @@ import {
 } from "@/lib/network";
 import { getAcquisitionFunnel } from "@/lib/metrics";
 import { getDb } from "@/lib/db/client";
+import { track } from "@/lib/events";
 import { assessEligibility } from "@/lib/eligibility";
 import { composeMentionEmail, notifyMention } from "@/lib/notify";
 import { getFlywheelMetrics } from "@/lib/metrics";
@@ -1185,6 +1186,7 @@ describe("the acquisition funnel", () => {
       outgoingCredits: 0,
       mentionedProfiles: 0,
       followOnClaims: 0,
+      attribution: { clicked: 0, invited: 0, organic: 0 },
     });
   });
 
@@ -1270,9 +1272,28 @@ describe("the sitemap", () => {
     await resetDatabase();
   });
 
-  it("leaves out a profile nobody has connected", async () => {
+  it("leaves out a profile with nothing on it at all", async () => {
+    // No description, no about, no capability, no edge: a name and a line
+    // saying nobody has said anything. The only genuinely thin shape here.
     await joinedCompany("lonely.dev", "Lonely");
     expect(await listAllCompanySlugs()).toHaveLength(0);
+  });
+
+  it("keeps an unclaimed profile that has something to read", async () => {
+    // The imported cohort's shape, and 3,009 of the 3,074 live profiles.
+    // Being findable in search is the whole reason these exist, so they
+    // stay in the sitemap whether or not anyone has credited them.
+    await addCompany({
+      url: "imported.dev",
+      name: "Imported",
+      description: "Turns long videos into searchable transcripts.",
+      source: "LAUNCHLLAMA",
+      status: "UNCLAIMED",
+    });
+
+    expect((await listAllCompanySlugs()).map((r) => r.slug)).toContain(
+      "imported",
+    );
   });
 
   it("includes a profile as soon as it has an edge, either way round", async () => {
@@ -1328,5 +1349,125 @@ describe("the sitemap", () => {
     await setRelationshipState(edge.id, "DISPUTED");
 
     expect(await listAllCompanySlugs()).toHaveLength(0);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* what brought a credited profile back                                       */
+/* -------------------------------------------------------------------------- */
+
+describe("attributing a follow-on claim", () => {
+  beforeEach(async () => {
+    await resetDatabase();
+  });
+
+  /** A credited profile, ready to claim. */
+  async function creditedVendor() {
+    const acme = await joinedCompany("acme.dev", "Acme");
+    await submitStack({
+      companyId: acme.id,
+      tools: [{ website: "vendor.dev", name: "Vendor" }],
+    });
+    return (await getCompanyByDomain("vendor.dev"))!;
+  }
+
+  it("counts a claim we cannot explain as organic, not as the flywheel", async () => {
+    const vendor = await creditedVendor();
+    await claimProfile(vendor);
+
+    const { attribution, followOnClaims } = await getAcquisitionFunnel();
+    expect(followOnClaims).toBe(1);
+    expect(attribution).toEqual({ clicked: 0, invited: 0, organic: 1 });
+  });
+
+  it("counts them as clicked when they came through our link", async () => {
+    const vendor = await creditedVendor();
+    await track("claim_clicked", {
+      companyId: vendor.id,
+      props: { ref: "email" },
+    });
+    await claimProfile(vendor);
+
+    const { attribution } = await getAcquisitionFunnel();
+    expect(attribution).toEqual({ clicked: 1, invited: 0, organic: 0 });
+  });
+
+  it("does not treat an undelivered notification as having reached anyone", async () => {
+    // The production setting: no RESEND_API_KEY, so the notification is
+    // written with status SENT over the outbox transport and no mail leaves.
+    const vendor = await creditedVendor();
+    await track("claim_email_sent", {
+      companyId: vendor.id,
+      props: { transport: "outbox" },
+    });
+    await claimProfile(vendor);
+
+    const { attribution } = await getAcquisitionFunnel();
+    expect(attribution).toEqual({ clicked: 0, invited: 0, organic: 1 });
+  });
+
+  it("counts a real email as an invitation", async () => {
+    const vendor = await creditedVendor();
+    await track("claim_email_sent", {
+      companyId: vendor.id,
+      props: { transport: "resend" },
+    });
+    await claimProfile(vendor);
+
+    const { attribution } = await getAcquisitionFunnel();
+    expect(attribution).toEqual({ clicked: 0, invited: 1, organic: 0 });
+  });
+
+  it("prefers the click when both are present, and counts each company once", async () => {
+    const vendor = await creditedVendor();
+    await track("claim_email_sent", {
+      companyId: vendor.id,
+      props: { transport: "resend" },
+    });
+    await track("claim_clicked", { companyId: vendor.id, props: { ref: "email" } });
+    await claimProfile(vendor);
+
+    const { attribution, followOnClaims } = await getAcquisitionFunnel();
+    expect(attribution).toEqual({ clicked: 1, invited: 0, organic: 0 });
+    expect(attribution.clicked + attribution.invited + attribution.organic).toBe(
+      followOnClaims,
+    );
+  });
+
+  it("ignores a click that only happened after the claim", async () => {
+    const vendor = await creditedVendor();
+    const claimed = await claimProfile(vendor);
+    // Tracked with a timestamp strictly after claimed_at.
+    await getDb().execute({
+      sql: `INSERT INTO events (id, name, company_id, target_company_id, props, created_at)
+            VALUES (?, 'claim_clicked', ?, NULL, NULL, ?)`,
+      args: [
+        "later-click",
+        vendor.id,
+        new Date(Date.parse(claimed.claimedAt!) + 60_000).toISOString(),
+      ],
+    });
+
+    const { attribution } = await getAcquisitionFunnel();
+    expect(attribution).toEqual({ clicked: 0, invited: 0, organic: 1 });
+  });
+
+  it("never attributes a self-added company's own claim to the loop", async () => {
+    const acme = await joinedCompany("acme.dev", "Acme");
+    await track("claim_clicked", { companyId: acme.id, props: { ref: "email" } });
+    await submitStack({
+      companyId: acme.id,
+      tools: [
+        { website: "plausible.io", name: "Plausible" },
+        { website: "tally.so", name: "Tally" },
+      ],
+    });
+
+    const { attribution, followOnClaims, verifiedClaims } =
+      await getAcquisitionFunnel();
+    expect(verifiedClaims).toBe(1);
+    // They were never a MENTIONED profile, so they are not a second turn.
+    expect(followOnClaims).toBe(0);
+    expect(attribution).toEqual({ clicked: 0, invited: 0, organic: 0 });
   });
 });

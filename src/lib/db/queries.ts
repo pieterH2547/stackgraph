@@ -1083,13 +1083,24 @@ export async function listCompaniesWithCounts(): Promise<CompanyWithCounts[]> {
 /**
  * The company pages worth submitting for indexing.
  *
- * Two filters, and both are about not asking for something we would not want
- * granted. A profile with no edges has nothing on it that a search result
- * could usefully lead to — the page says so itself — and a few thousand of
- * them submitted at once is the shape of a doorway-page farm, which is a
- * reputation this domain cannot afford while the graph is still small. They
- * stay reachable and crawlable; they are simply not advertised until somebody
- * has said something about them. Demo rows never belong in a sitemap at all.
+ * The first draft of this required an edge, and measuring it before merging
+ * was what saved it: 19 of 3,074 profiles have one. That filter would have
+ * withdrawn 99.4% of the indexed site — and an unclaimed profile found in
+ * search is how a founder discovers this place at all. Nothing else is
+ * reaching them: there is no outreach, and with `RESEND_API_KEY` unset the
+ * recognition emails never leave the building. Thirty-two companies added
+ * themselves in October anyway, which is a channel to protect rather than
+ * one to switch off over a risk nobody has measured.
+ *
+ * So the bar is content, not connections. A profile carrying a description
+ * is a real company with something to read, whether or not anyone has
+ * credited it yet, and that is what the sitemap is for. What stays out:
+ *
+ *  - demo rows, which are fixtures and never belonged in a sitemap
+ *  - empty shells: no description, no about, no stated capability and no
+ *    edge. Nothing on the page but a name and a line saying nobody has
+ *    said anything yet. Those are the only ones that are genuinely thin,
+ *    and they stay crawlable — they are simply not advertised.
  *
  * `updated_at`, not `created_at`: the schema keeps it current when a profile
  * or its relationships change, which is exactly the event a crawler should
@@ -1101,10 +1112,15 @@ export async function listAllCompanySlugs(): Promise<
   const { rows } = await getDb().execute(
     `SELECT slug, updated_at FROM companies c
       WHERE c.is_demo = 0
-        AND EXISTS (
-          SELECT 1 FROM relationships r
-           WHERE (r.source_company_id = c.id OR r.target_company_id = c.id)
-             AND r.state != 'DISPUTED'
+        AND (
+          TRIM(COALESCE(c.description, '')) != ''
+          OR TRIM(COALESCE(c.about, '')) != ''
+          OR TRIM(COALESCE(c.what_it_does, '')) NOT IN ('', '[]')
+          OR EXISTS (
+            SELECT 1 FROM relationships r
+             WHERE (r.source_company_id = c.id OR r.target_company_id = c.id)
+               AND r.state != 'DISPUTED'
+          )
         )
       ORDER BY updated_at DESC`,
   );

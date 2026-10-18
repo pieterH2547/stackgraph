@@ -307,6 +307,9 @@ function AcquisitionFunnel({
     },
   ];
 
+  const { clicked, invited, organic } = funnel.attribution;
+  const causedByUs = clicked + invited;
+
   return (
     <section className="card mt-8 p-6 sm:p-8">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -347,6 +350,28 @@ function AcquisitionFunnel({
           the companies that added themselves — it has not yet turned on its
           own.
         </p>
+      )}
+
+      {/* The last step, split by what actually brought them back. */}
+      {funnel.followOnClaims > 0 && (
+        <div className="mt-4 border-t border-line pt-4">
+          <p className="label">Of those, what brought them back</p>
+          <p className="mono leading-relaxed text-ink-2">
+            <span className="text-ink">{padCount(clicked)}</span> followed our
+            link ·{" "}
+            <span className="text-ink">{padCount(invited)}</span> were emailed
+            and came back ·{" "}
+            <span className="text-ink">{padCount(organic)}</span> arrived on
+            their own
+          </p>
+          <p className="mono mt-3 leading-relaxed text-ink-3">
+            {causedByUs === 0
+              ? "Nothing here is attributable to the loop yet: every one of these " +
+                "companies found the site by some route we do not measure. A claim " +
+                "we did not cause is demand, not a flywheel."
+              : `${percent(causedByUs / funnel.followOnClaims, 0)} of follow-on claims are attributable to a recognition we sent. The rest arrived on their own.`}
+          </p>
+        </div>
       )}
     </section>
   );
