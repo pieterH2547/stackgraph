@@ -10,6 +10,7 @@ const RESERVED = new Set([
   "about",
   "new",
   "search",
+  "badge",
 ]);
 
 export function slugify(input: string): string {

@@ -28,6 +28,16 @@ export const routes = {
   advertise: () => "/advertise",
   adminSponsors: () => "/admin/sponsors",
   adminSponsor: (id: string) => `/admin/sponsors/${id}`,
+  /** Where a company picks up its badge and the embed code. */
+  badge: (slug: string) => `/c/${slug}/badge`,
+  /** The image itself, as other sites fetch it. */
+  badgeImage: (slug: string, theme: "light" | "dark" = "light") =>
+    `/badge/${slug}.svg${theme === "light" ? "" : `?theme=${theme}`}`,
+  /**
+   * The profile, arrived at through a badge. Same page, same canonical; the
+   * marker only lets a click-through be counted.
+   */
+  profileFromBadge: (slug: string) => `/c/${slug}?ref=badge`,
 } as const;
 
 /**

@@ -108,6 +108,23 @@ export default async function ManagePage({ params }: PageProps<"/manage/[slug]">
         )}
       </section>
 
+      {/* The badge: that count, on your own site, if you want it there. */}
+      <section className="mt-10 border-l-2 border-accent pl-5 sm:pl-6">
+        <h2 className="text-xl font-medium tracking-tight">
+          {brand.badge.heading}
+        </h2>
+        <p className="mt-2 max-w-lg leading-relaxed text-ink-2">
+          Show how many companies say they use {company.name}, live from this
+          profile and in its own words. Optional: nothing here depends on it.
+        </p>
+        <Link
+          href={routes.badge(company.slug)}
+          className="btn btn-secondary mt-4 !py-2 !text-sm"
+        >
+          {brand.badge.cta}
+        </Link>
+      </section>
+
       {/* Your stack. */}
       <section className="mt-14">
         <h2 className="text-xl font-medium tracking-tight">{brand.poweredBy}</h2>
