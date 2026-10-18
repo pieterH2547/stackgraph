@@ -11,12 +11,19 @@ import {
   listClaimedCompanies,
   listCreditedCompanies,
   listIncumbentCompanies,
+  listJoinedCompanies,
   listRecentEdges,
   listSourcedCompanies,
 } from "@/lib/db/queries";
 
 /** How many of each group a page this long can carry without becoming a list. */
-const SHOWN = { claimed: 60, credited: 60, sourced: 24, incumbents: 60 };
+const SHOWN = {
+  claimed: 60,
+  credited: 60,
+  joined: 60,
+  sourced: 24,
+  incumbents: 60,
+};
 
 export const dynamic = "force-dynamic";
 
@@ -27,19 +34,25 @@ export const metadata: Metadata = {
 };
 
 export default async function NetworkPage() {
-  const [stats, totals, claimed, credited, sourced, incumbents, edges] =
+  const [stats, totals, claimed, credited, joined, sourced, incumbents, edges] =
     await Promise.all([
       getNetworkStats(),
       getNetworkGroupCounts(),
       listClaimedCompanies(SHOWN.claimed),
       listCreditedCompanies(SHOWN.credited),
+      listJoinedCompanies(SHOWN.joined),
       listSourcedCompanies(SHOWN.sourced),
       listIncumbentCompanies(SHOWN.incumbents),
       listRecentEdges(20),
     ]);
 
   const empty =
-    totals.claimed + totals.credited + totals.sourced + totals.incumbents === 0;
+    totals.claimed +
+      totals.credited +
+      totals.joined +
+      totals.sourced +
+      totals.incumbents ===
+    0;
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-12 sm:px-8 sm:py-16">
@@ -90,10 +103,29 @@ export default async function NetworkPage() {
               title="Credited, not claimed yet"
               count={totals.credited}
               shown={credited.length}
-              aside="Created because someone said they use them"
+              aside="At least one company says it uses them"
             >
               <Grid>
                 {credited.map((company) => (
+                  <CompanyCard
+                    key={company.id}
+                    company={company}
+                    usedBy={company.incoming}
+                  />
+                ))}
+              </Grid>
+            </Section>
+          )}
+
+          {joined.length > 0 && (
+            <Section
+              title="Added themselves, not credited yet"
+              count={totals.joined}
+              shown={joined.length}
+              aside="Walked in the door; nobody has named them yet"
+            >
+              <Grid>
+                {joined.map((company) => (
                   <CompanyCard
                     key={company.id}
                     company={company}

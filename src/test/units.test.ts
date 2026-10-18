@@ -1,12 +1,21 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resetDatabase } from "./helpers";
 import { claimDomainMatches, isValidEmail } from "@/lib/claims";
+import { hasSomethingToRead, looksLikeTestRecord } from "@/lib/audit";
 import { isDerivedName } from "@/lib/detect";
 import { assessEligibility } from "@/lib/eligibility";
 import { initials, padCount, timeAgo } from "@/lib/format";
 import { slugify, uniqueSlug } from "@/lib/slug";
 import { createCompany } from "@/lib/db/queries";
-import { nameFromDomain, normalizeSiteUrl, tryNormalizeSiteUrl } from "@/lib/url";
+import {
+  hostedPage,
+  hostedPageMessage,
+  InvalidSiteUrlError,
+  nameFromDomain,
+  normalizeCompanySiteUrl,
+  normalizeSiteUrl,
+  tryNormalizeSiteUrl,
+} from "@/lib/url";
 
 describe("site URLs", () => {
   it("normalizes every spelling of the same company to one domain", () => {
@@ -242,5 +251,170 @@ describe("suggestions never add anything by themselves", () => {
   it("offers no used-by suggestion surface at all", async () => {
     const signals = await import("@/lib/signals");
     expect(signals).not.toHaveProperty("suggestUsedBy");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* pages on somebody else's platform                                          */
+/* -------------------------------------------------------------------------- */
+
+describe("a page on a platform is not a company", () => {
+  it("refuses the exact shape that took over tally.so", () => {
+    // A form somebody built on Tally. Normalising this to a registrable
+    // domain is what gave one directory row ownership of Tally's identity.
+    const page = hostedPage("https://tally.so/r/MevyAE");
+    expect(page).not.toBeNull();
+    expect(page!.host).toBe("tally.so");
+    expect(() => normalizeCompanySiteUrl("https://tally.so/r/MevyAE")).toThrow(
+      InvalidSiteUrlError,
+    );
+  });
+
+  it("still lets Tally itself be Tally", () => {
+    // The whole point of the graph is that companies can credit Tally. Only
+    // the path is the problem, never the host on its own.
+    for (const input of ["tally.so", "https://tally.so", "https://www.tally.so/"]) {
+      expect(hostedPage(input)).toBeNull();
+      expect(normalizeCompanySiteUrl(input).domain).toBe("tally.so");
+    }
+  });
+
+  it("treats homepage decoration as the homepage", () => {
+    for (const input of [
+      "https://tally.so/",
+      "https://tally.so/en",
+      "https://tally.so/home",
+      "https://tally.so/index.html",
+    ]) {
+      expect(hostedPage(input), input).toBeNull();
+    }
+  });
+
+  it("reads the platform's own marketing pages as the platform", () => {
+    // Somebody crediting Tally will paste whichever Tally page they had open,
+    // and every one of these is still Tally talking about itself.
+    for (const input of [
+      "https://tally.so/pricing",
+      "https://www.tally.so/pricing",
+      "https://tally.so/templates",
+      "https://tally.so/blog/some-post",
+      "https://tally.so/help",
+      "https://github.com/pricing",
+    ]) {
+      expect(hostedPage(input), input).toBeNull();
+    }
+    expect(normalizeCompanySiteUrl("https://www.tally.so/pricing").domain).toBe(
+      "tally.so",
+    );
+  });
+
+  it("covers the other platforms whose paths belong to their customers", () => {
+    for (const input of [
+      "https://github.com/someone/their-repo",
+      "https://notion.so/Some-Page-abc123",
+      "https://docs.google.com/forms/d/e/1FAIpQ/viewform",
+      "https://apps.apple.com/us/app/something/id123",
+      "https://producthunt.com/posts/something",
+      "https://x.com/someone",
+      "https://substack.com/@someone",
+      "https://calendly.com/someone/30min",
+    ]) {
+      expect(hostedPage(input), input).not.toBeNull();
+    }
+  });
+
+  it("leaves a deep link on a company's own domain alone", () => {
+    // People paste these constantly and the domain really is theirs. Only
+    // somebody else's platform plus a path proves this isn't their site.
+    for (const input of [
+      "https://acme.dev/pricing",
+      "https://acme.dev/product/overview",
+      "http://WWW.Tally.so/pricing#x",
+    ]) {
+      expect(hostedPage(input.replace(/tally\.so/i, "acme.dev")), input).toBeNull();
+    }
+    expect(normalizeCompanySiteUrl("https://acme.dev/pricing").domain).toBe(
+      "acme.dev",
+    );
+  });
+
+  it("says which platform it saw, so the message can be useful", () => {
+    const page = hostedPage("https://tally.so/r/MevyAE")!;
+    const message = hostedPageMessage(page, "DopamineLess");
+    expect(message).toContain("DopamineLess");
+    expect(message).toContain("tally.so");
+  });
+
+  it("never throws on rubbish: unparseable input stays the other guard's job", () => {
+    for (const input of ["", "   ", "nonsense", "ftp://x"]) {
+      expect(hostedPage(input), input).toBeNull();
+    }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* telling a test record from a company                                       */
+/* -------------------------------------------------------------------------- */
+
+describe("spotting a test record", () => {
+  it("catches the shapes sitting in production", () => {
+    expect(looksLikeTestRecord("Probe 1789743723689", "probe.example.com")).toBe(
+      "name",
+    );
+    expect(looksLikeTestRecord("CatProbe SEO", "catprobe-seo.com")).toBe("name");
+    expect(looksLikeTestRecord("PandaProbe Cloud", "pandaprobe.cloud")).toBe(
+      "name",
+    );
+    expect(looksLikeTestRecord("Map Fix Probe", "mapfix.dev")).toBe("name");
+    expect(looksLikeTestRecord("Something", "test-harness.dev")).toBe("domain");
+    expect(looksLikeTestRecord("Something", "acme.example.com")).toBe("domain");
+  });
+
+  it("leaves real companies alone", () => {
+    // An unanchored /test/ or /probe/ would flag every one of these, and an
+    // audit full of false positives is an audit nobody reads twice.
+    for (const [name, domain] of [
+      ["Protest Analytics", "protestanalytics.com"],
+      ["Contest App", "contestapp.com"],
+      ["Latest", "latest.dev"],
+      ["Testimonial Hero", "testimonialhero.com"],
+      ["Probench", "probench.io"],
+      ["Attest", "attest.com"],
+      ["Greatest Hits", "greatesthits.fm"],
+    ] as const) {
+      expect(looksLikeTestRecord(name, domain), `${name} / ${domain}`).toBeNull();
+    }
+  });
+
+  it("does not trip over a normal number in a name", () => {
+    expect(looksLikeTestRecord("Nano Banana 2 Lite", "nanobanana2.com")).toBeNull();
+    expect(looksLikeTestRecord("Krea 3", "krea.ai")).toBeNull();
+    expect(looksLikeTestRecord("1Password", "1password.com")).toBeNull();
+  });
+});
+
+describe("whether a profile has anything to read", () => {
+  it("counts a description, an about or a stated capability", () => {
+    expect(hasSomethingToRead({ description: "Does a thing." }, 0)).toBe(true);
+    expect(hasSomethingToRead({ about: "We are three people in Ghent." }, 0)).toBe(
+      true,
+    );
+    expect(hasSomethingToRead({ whatItDoes: ["Transcribes video"] }, 0)).toBe(
+      true,
+    );
+  });
+
+  it("counts an edge even when the profile says nothing itself", () => {
+    expect(hasSomethingToRead({}, 1)).toBe(true);
+  });
+
+  it("is false only for a page with a name and nothing else", () => {
+    expect(hasSomethingToRead({}, 0)).toBe(false);
+    expect(
+      hasSomethingToRead(
+        { description: "   ", about: null, whatItDoes: [] },
+        0,
+      ),
+    ).toBe(false);
   });
 });

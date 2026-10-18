@@ -12,6 +12,13 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Who uses what?",
   description: `Search a company on ${brand.name} to see who uses it and what tools it runs on.`,
+  /*
+   * A result page per query is an unbounded surface, and none of it is a
+   * page anyone should land on from a search engine — the profiles behind
+   * it are. Crawlable on purpose, so this is read rather than guessed at.
+   */
+  robots: { index: false, follow: true },
+  alternates: { canonical: "/search" },
 };
 
 /**

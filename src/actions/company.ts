@@ -6,7 +6,7 @@ import { addCompany } from "@/lib/network";
 import { canEdit, grantEditAccess } from "@/lib/session";
 import { getCompanyByDomain } from "@/lib/db/queries";
 import { track } from "@/lib/events";
-import { InvalidSiteUrlError, normalizeSiteUrl } from "@/lib/url";
+import { InvalidSiteUrlError, normalizeCompanySiteUrl } from "@/lib/url";
 import { routes } from "@/lib/routes";
 import { CATEGORIES } from "@/lib/brand";
 
@@ -23,7 +23,9 @@ export async function submitWebsite(
 
   let normalized;
   try {
-    normalized = normalizeSiteUrl(raw);
+    // Not `normalizeSiteUrl`: a form built on Tally is not a company, and
+    // letting one through here is how `tally.so` stopped being Tally.
+    normalized = normalizeCompanySiteUrl(raw);
   } catch (error) {
     return {
       error:
@@ -65,9 +67,14 @@ export async function confirmCompany(
 
   let normalized;
   try {
-    normalized = normalizeSiteUrl(url);
-  } catch {
-    return { error: "That doesn't look like a website address." };
+    normalized = normalizeCompanySiteUrl(url);
+  } catch (error) {
+    return {
+      error:
+        error instanceof InvalidSiteUrlError
+          ? error.message
+          : "That doesn't look like a website address.",
+    };
   }
 
   const existing = await getCompanyByDomain(normalized.domain);

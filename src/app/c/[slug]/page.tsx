@@ -17,6 +17,7 @@ import {
 import { getProfile } from "@/lib/network";
 import { canEdit } from "@/lib/session";
 import { canManage } from "@/lib/auth/session";
+import { hasSomethingToRead } from "@/lib/audit";
 import { routes } from "@/lib/routes";
 import { stackShareText } from "@/lib/share";
 import type { Company, DetectedTool, RelationshipEdge } from "@/lib/types";
@@ -61,6 +62,21 @@ export async function generateMetadata({
   return {
     title,
     description,
+    /*
+     * Only a page with nothing on it asks to be left out.
+     *
+     * Not every unclaimed profile: 19 of 3,074 have an edge, and an
+     * unclaimed profile found in search is how a founder discovers this
+     * place — noindexing those would withdraw the site's only acquisition
+     * channel to avoid a risk nobody has measured. A profile with a
+     * description is a real company with something to read. One with no
+     * description, no about, no capability and no edge is a name and a
+     * sentence saying nobody has said anything, and that is the only shape
+     * here that is genuinely thin. It stays crawlable either way.
+     */
+    robots: hasSomethingToRead(company, incoming + outgoing)
+      ? undefined
+      : { index: false, follow: true },
     alternates: { canonical: `/c/${company.slug}` },
     openGraph: {
       title: `${title} · ${brand.name}`,

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { CompanyCard } from "@/components/CompanyCard";
 import { CompanyLookup } from "@/components/CompanyLookup";
@@ -17,6 +18,16 @@ import {
 } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * The homepage had no metadata of its own, so it had no canonical either —
+ * and it is the one URL every campaign parameter, every `?ref=` and every
+ * bare link lands on. Without it there is nothing telling a crawler those
+ * are all the same page.
+ */
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
 
 /**
  * The page answers one question and then proves it can.

@@ -23,6 +23,12 @@ export async function generateMetadata({
   return {
     title: name,
     description: `Independent ${name.toLowerCase()} software on ${brand.name}, and who uses it.`,
+    /*
+     * Deliberately the unpaginated URL, from every page. `?page=2` is the
+     * same category seen further down, not a second subject, and the
+     * profiles it lists are in the sitemap on their own account.
+     */
+    alternates: { canonical: `/categories/${encodeURIComponent(name)}` },
   };
 }
 

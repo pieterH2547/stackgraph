@@ -10,19 +10,21 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: "*",
       allow: "/",
+      /*
+       * Only what must never be fetched. Everything else that should stay
+       * out of the index carries `robots: { index: false }` on the page
+       * itself, and a crawler has to be allowed to fetch a page before it
+       * can read that. Blocking those here as well was the one combination
+       * that does not work: a disallowed URL with inbound links can sit in
+       * the index as a bare URL forever, because the noindex telling it to
+       * leave was never readable.
+       */
       disallow: [
         "/admin",
         "/admin/",
-        "/add/confirm",
-        "/stack/",
-        "/claim/",
-        "/done/",
-        "/manage/",
-        "/dashboard",
-        "/signin",
         "/auth/",
-        // A query surface, not a page worth indexing.
-        "/search",
+        // Route handlers: an unbounded query surface, never a page.
+        "/api/",
       ],
     },
     sitemap: absoluteUrl("/sitemap.xml"),
