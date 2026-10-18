@@ -24,7 +24,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })),
     ...companies.map((company) => ({
       url: absoluteUrl(`/c/${company.slug}`),
-      lastModified: new Date(company.createdAt),
+      lastModified: new Date(company.updatedAt),
       changeFrequency: "weekly" as const,
       priority: 0.7,
     })),

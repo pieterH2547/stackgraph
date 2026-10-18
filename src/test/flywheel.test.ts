@@ -13,9 +13,14 @@ import {
   countUpstreamCredits,
   getCompanyByDomain,
   getCompanyBySlug,
+  getNetworkGroupCounts,
+  listAllCompanySlugs,
+  listCreditedCompanies,
   listIncomingEdges,
+  listJoinedCompanies,
   listOutgoingEdges,
   searchCompanies,
+  setRelationshipState,
   updateCompany,
 } from "@/lib/db/queries";
 import {
@@ -27,6 +32,8 @@ import {
   StackValidationError,
   submitStack,
 } from "@/lib/network";
+import { getAcquisitionFunnel } from "@/lib/metrics";
+import { getDb } from "@/lib/db/client";
 import { assessEligibility } from "@/lib/eligibility";
 import { composeMentionEmail, notifyMention } from "@/lib/notify";
 import { getFlywheelMetrics } from "@/lib/metrics";
@@ -969,5 +976,357 @@ describe("a credit can be withdrawn by whoever gave it", () => {
     await deleteRelationship((await listOutgoingEdges(acme.id))[0].id);
     expect(await deleteOrphanedMention(tally.id)).toBe(false);
     expect(await getCompanyByDomain("tally.so")).not.toBeNull();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* a hosted page never becomes a vendor                                       */
+/* -------------------------------------------------------------------------- */
+
+describe("crediting a page on somebody else's platform", () => {
+  beforeEach(async () => {
+    await resetDatabase();
+  });
+
+  it("refuses it, and creates no profile owning the platform's domain", async () => {
+    const acme = await joinedCompany("acme.dev", "Acme");
+
+    await expect(
+      submitStack({
+        companyId: acme.id,
+        tools: [{ website: "https://tally.so/r/MevyAE", name: "Our feedback form" }],
+      }),
+    ).rejects.toBeInstanceOf(StackValidationError);
+
+    // The damage this prevents: a profile that owns tally.so without being
+    // Tally, which every later credit to Tally would then be pointed at.
+    expect(await getCompanyByDomain("tally.so")).toBeNull();
+    expect(await listOutgoingEdges(acme.id)).toHaveLength(0);
+  });
+
+  it("keeps the good tools in the same submission and reports the bad one", async () => {
+    const acme = await joinedCompany("acme.dev", "Acme");
+
+    const result = await submitStack({
+      companyId: acme.id,
+      tools: [
+        { website: "plausible.io", name: "Plausible" },
+        { website: "https://tally.so/r/MevyAE", name: "Our feedback form" },
+      ],
+    });
+
+    expect(result.connections).toHaveLength(1);
+    expect(result.connections[0].company.domain).toBe("plausible.io");
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toContain("tally.so");
+    expect(await getCompanyByDomain("tally.so")).toBeNull();
+  });
+
+  it("still lets a company credit the platform itself", async () => {
+    const acme = await joinedCompany("acme.dev", "Acme");
+
+    const result = await submitStack({
+      companyId: acme.id,
+      tools: [{ website: "tally.so", name: "Tally" }],
+    });
+
+    expect(result.errors).toHaveLength(0);
+    const tally = await getCompanyByDomain("tally.so");
+    expect(tally).not.toBeNull();
+    expect(tally!.name).toBe("Tally");
+  });
+
+  it("two companies crediting Tally land on the same Tally", async () => {
+    // The property the production row broke: one domain, one vendor.
+    const acme = await joinedCompany("acme.dev", "Acme");
+    const beta = await joinedCompany("beta.dev", "Beta");
+
+    await submitStack({
+      companyId: acme.id,
+      tools: [{ website: "https://tally.so", name: "Tally" }],
+    });
+    await submitStack({
+      companyId: beta.id,
+      tools: [{ website: "www.tally.so/", name: "Tally" }],
+    });
+
+    const tally = await getCompanyByDomain("tally.so");
+    expect(tally).not.toBeNull();
+    expect(await listIncomingEdges(tally!.id)).toHaveLength(2);
+    expect(await countRows("companies")).toBe(3);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* the network page groups                                                    */
+/* -------------------------------------------------------------------------- */
+
+describe("how the network page groups a profile", () => {
+  beforeEach(async () => {
+    await resetDatabase();
+  });
+
+  it("puts a self-added company with no credits outside Credited", async () => {
+    // The production shape: somebody added their company, never finished, and
+    // nobody has ever said they use it. It is not "credited" by anything.
+    await joinedCompany("lonely.dev", "Lonely");
+
+    const credited = await listCreditedCompanies(60);
+    const joined = await listJoinedCompanies(60);
+    const totals = await getNetworkGroupCounts();
+
+    expect(credited.map((c) => c.domain)).not.toContain("lonely.dev");
+    expect(joined.map((c) => c.domain)).toContain("lonely.dev");
+    expect(totals.credited).toBe(0);
+    expect(totals.joined).toBe(1);
+  });
+
+  it("moves it into Credited the moment somebody credits it", async () => {
+    const lonely = await joinedCompany("lonely.dev", "Lonely");
+    const acme = await joinedCompany("acme.dev", "Acme");
+
+    await submitStack({
+      companyId: acme.id,
+      tools: [{ website: "lonely.dev", name: "Lonely" }],
+    });
+
+    const credited = await listCreditedCompanies(60);
+    const totals = await getNetworkGroupCounts();
+
+    expect(credited.map((c) => c.id)).toContain(lonely.id);
+    expect((await listJoinedCompanies(60)).map((c) => c.id)).not.toContain(
+      lonely.id,
+    );
+    expect(totals.credited).toBe(1);
+  });
+
+  it("counts an imported profile as credited once a company names it", async () => {
+    // Crisp's shape: source LAUNCHLLAMA, but a real company says it uses it.
+    const { company: imported } = await addCompany({
+      url: "crisp.chat",
+      name: "Crisp",
+      source: "LAUNCHLLAMA",
+      status: "UNCLAIMED",
+    });
+    const acme = await joinedCompany("acme.dev", "Acme");
+
+    expect((await getNetworkGroupCounts()).sourced).toBe(1);
+
+    await submitStack({
+      companyId: acme.id,
+      tools: [{ website: "crisp.chat", name: "Crisp" }],
+    });
+
+    const totals = await getNetworkGroupCounts();
+    expect((await listCreditedCompanies(60)).map((c) => c.id)).toContain(
+      imported.id,
+    );
+    expect(totals.sourced).toBe(0);
+    expect(totals.credited).toBe(1);
+  });
+
+  it("drops it back out of Credited when the vendor disputes the edge", async () => {
+    const acme = await joinedCompany("acme.dev", "Acme");
+    await submitStack({
+      companyId: acme.id,
+      tools: [{ website: "vendor.dev", name: "Vendor" }],
+    });
+    const vendor = (await getCompanyByDomain("vendor.dev"))!;
+    expect((await getNetworkGroupCounts()).credited).toBe(1);
+
+    const [edge] = await listIncomingEdges(vendor.id);
+    await setRelationshipState(edge.id, "DISPUTED");
+
+    const totals = await getNetworkGroupCounts();
+    expect((await listCreditedCompanies(60)).map((c) => c.id)).not.toContain(
+      vendor.id,
+    );
+    expect(totals.credited).toBe(0);
+  });
+
+  it("every profile lands in exactly one group", async () => {
+    const acme = await joinedCompany("acme.dev", "Acme");
+    await joinedCompany("lonely.dev", "Lonely");
+    await addCompany({ url: "imported.dev", name: "Imported", source: "LAUNCHLLAMA" });
+    await submitStack({
+      companyId: acme.id,
+      tools: [
+        { website: "vendor.dev", name: "Vendor" },
+        { website: "stripe.com", name: "Stripe" },
+      ],
+    });
+    await claimProfile(acme);
+
+    const totals = await getNetworkGroupCounts();
+    const sum =
+      totals.claimed +
+      totals.credited +
+      totals.joined +
+      totals.sourced +
+      totals.incumbents;
+
+    expect(sum).toBe(await countRows("companies"));
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* the acquisition funnel                                                     */
+/* -------------------------------------------------------------------------- */
+
+describe("the acquisition funnel", () => {
+  beforeEach(async () => {
+    await resetDatabase();
+  });
+
+  it("counts nothing before anything has happened", async () => {
+    expect(await getAcquisitionFunnel()).toEqual({
+      selfAdded: 0,
+      verifiedClaims: 0,
+      outgoingCredits: 0,
+      mentionedProfiles: 0,
+      followOnClaims: 0,
+    });
+  });
+
+  it("follows one company through every step", async () => {
+    const acme = await joinedCompany("acme.dev", "Acme");
+
+    expect((await getAcquisitionFunnel()).selfAdded).toBe(1);
+    expect((await getAcquisitionFunnel()).verifiedClaims).toBe(0);
+
+    await submitStack({
+      companyId: acme.id,
+      tools: [
+        { website: "plausible.io", name: "Plausible" },
+        { website: "tally.so", name: "Tally" },
+      ],
+    });
+
+    const funnel = await getAcquisitionFunnel();
+    expect(funnel.selfAdded).toBe(1);
+    // Two eligible credits is the whole claim, so it completed here.
+    expect(funnel.verifiedClaims).toBe(1);
+    expect(funnel.outgoingCredits).toBe(2);
+    expect(funnel.mentionedProfiles).toBe(2);
+    expect(funnel.followOnClaims).toBe(0);
+  });
+
+  it("counts the second turn only when a credited profile claims", async () => {
+    const acme = await joinedCompany("acme.dev", "Acme");
+    await submitStack({
+      companyId: acme.id,
+      tools: [
+        { website: "plausible.io", name: "Plausible" },
+        { website: "tally.so", name: "Tally" },
+      ],
+    });
+
+    const tally = (await getCompanyByDomain("tally.so"))!;
+    expect(tally.source).toBe("MENTIONED");
+    expect((await getAcquisitionFunnel()).followOnClaims).toBe(0);
+
+    await claimProfile(tally);
+
+    const funnel = await getAcquisitionFunnel();
+    expect(funnel.followOnClaims).toBe(1);
+    // A mentioned profile claiming is not a self-add: the distinction is the
+    // whole point of the number.
+    expect(funnel.selfAdded).toBe(1);
+    expect(funnel.verifiedClaims).toBe(1);
+  });
+
+  it("does not count a disputed edge as a credit given", async () => {
+    const acme = await joinedCompany("acme.dev", "Acme");
+    await submitStack({
+      companyId: acme.id,
+      tools: [{ website: "vendor.dev", name: "Vendor" }],
+    });
+    expect((await getAcquisitionFunnel()).outgoingCredits).toBe(1);
+
+    const vendor = (await getCompanyByDomain("vendor.dev"))!;
+    const [edge] = await listIncomingEdges(vendor.id);
+    await setRelationshipState(edge.id, "DISPUTED");
+
+    expect((await getAcquisitionFunnel()).outgoingCredits).toBe(0);
+  });
+
+  it("leaves imported profiles out of the self-add step", async () => {
+    await addCompany({ url: "imported.dev", name: "Imported", source: "LAUNCHLLAMA" });
+    await addCompany({ url: "seeded.dev", name: "Seeded", source: "SEED" });
+    await joinedCompany("acme.dev", "Acme");
+
+    const funnel = await getAcquisitionFunnel();
+    expect(funnel.selfAdded).toBe(1);
+    expect(funnel.mentionedProfiles).toBe(0);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* what we ask to have indexed                                                */
+/* -------------------------------------------------------------------------- */
+
+describe("the sitemap", () => {
+  beforeEach(async () => {
+    await resetDatabase();
+  });
+
+  it("leaves out a profile nobody has connected", async () => {
+    await joinedCompany("lonely.dev", "Lonely");
+    expect(await listAllCompanySlugs()).toHaveLength(0);
+  });
+
+  it("includes a profile as soon as it has an edge, either way round", async () => {
+    const acme = await joinedCompany("acme.dev", "Acme");
+    await submitStack({
+      companyId: acme.id,
+      tools: [{ website: "vendor.dev", name: "Vendor" }],
+    });
+
+    const slugs = (await listAllCompanySlugs()).map((row) => row.slug);
+    // The company that gave the credit and the one that received it.
+    expect(slugs).toContain("acme");
+    expect(slugs).toContain("vendor");
+  });
+
+  it("leaves out demo rows", async () => {
+    const acme = await joinedCompany("acme.dev", "Acme");
+    await submitStack({
+      companyId: acme.id,
+      tools: [{ website: "vendor.dev", name: "Vendor" }],
+    });
+    await getDb().execute({
+      sql: `UPDATE companies SET is_demo = 1 WHERE id = ?`,
+      args: [acme.id],
+    });
+
+    const slugs = (await listAllCompanySlugs()).map((row) => row.slug);
+    expect(slugs).not.toContain("acme");
+  });
+
+  it("reports when the profile last changed, not when it was created", async () => {
+    const acme = await joinedCompany("acme.dev", "Acme");
+    const created = acme.createdAt;
+
+    await submitStack({
+      companyId: acme.id,
+      tools: [{ website: "vendor.dev", name: "Vendor" }],
+    });
+
+    const entry = (await listAllCompanySlugs()).find((r) => r.slug === "acme")!;
+    // A new edge is exactly the change a crawler should come back for.
+    expect(entry.updatedAt >= created).toBe(true);
+  });
+
+  it("drops a profile again when its only edge is disputed", async () => {
+    const acme = await joinedCompany("acme.dev", "Acme");
+    await submitStack({
+      companyId: acme.id,
+      tools: [{ website: "vendor.dev", name: "Vendor" }],
+    });
+    const vendor = (await getCompanyByDomain("vendor.dev"))!;
+    const [edge] = await listIncomingEdges(vendor.id);
+    await setRelationshipState(edge.id, "DISPUTED");
+
+    expect(await listAllCompanySlugs()).toHaveLength(0);
   });
 });

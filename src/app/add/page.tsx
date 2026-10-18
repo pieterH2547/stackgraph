@@ -6,6 +6,7 @@ import { brand } from "@/lib/brand";
 export const metadata: Metadata = {
   title: brand.ctaPrimary,
   description: brand.heroSubline,
+  alternates: { canonical: "/add" },
 };
 
 export default function AddPage() {

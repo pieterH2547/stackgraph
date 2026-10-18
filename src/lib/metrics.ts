@@ -64,6 +64,74 @@ function ratio(numerator: number, denominator: number): number {
   return denominator === 0 ? 0 : numerator / denominator;
 }
 
+/* -------------------------------------------------------------------------- */
+/* the acquisition funnel                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Five numbers, in the order a company moves through them.
+ *
+ * Read from `companies` and `relationships` rather than from the event log,
+ * on purpose. Events are append-only and can be missed — a deploy mid-flow, a
+ * failed write — while the rows are the thing itself: a company either has a
+ * membership or it does not. The event counts stay on this page underneath,
+ * and a gap between the two is itself worth seeing.
+ *
+ * The last number is the only one that matters in the end. Everything above
+ * it can be bought with traffic; `followOnClaims` cannot, because it counts
+ * companies that were put on the graph by somebody else's credit and then
+ * came back and claimed. That is the flywheel turning a second time.
+ */
+export interface AcquisitionFunnel {
+  /** Added their own company through /add. */
+  selfAdded: number;
+  /** Of those, identity established — the ownership flow completed. */
+  verifiedClaims: number;
+  /** Credits those companies gave: edges they reported about their own stack. */
+  outgoingCredits: number;
+  /** Profiles that exist only because a credit named them. */
+  mentionedProfiles: number;
+  /** Of those, the ones that have since claimed. The recursion. */
+  followOnClaims: number;
+}
+
+export async function getAcquisitionFunnel(): Promise<AcquisitionFunnel> {
+  const db = getDb();
+
+  const [joined, credits, mentioned] = await Promise.all([
+    db.execute(
+      `SELECT
+         COUNT(*) AS self_added,
+         SUM(CASE WHEN status = 'CLAIMED' THEN 1 ELSE 0 END) AS verified
+       FROM companies
+       WHERE source = 'SELF_ADDED'`,
+    ),
+    // Attributed to whoever stated it, which is always the company talking
+    // about its own stack. A disputed edge is not a credit any more.
+    db.execute(
+      `SELECT COUNT(*) AS n
+         FROM relationships r
+         JOIN companies c ON c.id = r.reported_by_company_id
+        WHERE c.source = 'SELF_ADDED' AND r.state != 'DISPUTED'`,
+    ),
+    db.execute(
+      `SELECT
+         COUNT(*) AS total,
+         SUM(CASE WHEN status = 'CLAIMED' THEN 1 ELSE 0 END) AS claimed
+       FROM companies
+       WHERE source = 'MENTIONED'`,
+    ),
+  ]);
+
+  return {
+    selfAdded: Number(joined.rows[0]?.self_added ?? 0),
+    verifiedClaims: Number(joined.rows[0]?.verified ?? 0),
+    outgoingCredits: Number(credits.rows[0]?.n ?? 0),
+    mentionedProfiles: Number(mentioned.rows[0]?.total ?? 0),
+    followOnClaims: Number(mentioned.rows[0]?.claimed ?? 0),
+  };
+}
+
 function median(values: number[]): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((a, b) => a - b);

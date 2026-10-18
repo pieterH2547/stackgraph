@@ -962,25 +962,58 @@ ${EDGE_COUNTS},
 
 const SOURCED_PLACEHOLDERS = SOURCED_BY_US.map(() => "?").join(", ");
 
+/**
+ * Somebody has actually said they use this company.
+ *
+ * A disputed edge is not a credit: the vendor said they do not recognise the
+ * company claiming them, and it is already gone from every public count.
+ */
+const HAS_CREDIT = `EXISTS (
+    SELECT 1 FROM relationships r
+     WHERE r.target_company_id = c.id AND r.state != 'DISPUTED'
+  )`;
+
+/** Unclaimed and still in the acquisition loop — the three groups below. */
+const OPEN_PROFILE = `c.status != 'CLAIMED' AND c.network_eligible = 1`;
+
 /** Claimed, whoever put them here first. */
 export function listClaimedCompanies(limit = 60) {
   return listNetworkGroup("c.status = 'CLAIMED'", [], limit);
 }
 
-/** Unclaimed, and here because another company named them. */
+/**
+ * Unclaimed, and somebody has credited them.
+ *
+ * The group is defined by the edge, not by the `source` column. Those are
+ * different questions — how a profile got here, and whether anyone has since
+ * said they use it — and reading one for the other is what put 26 companies
+ * that nobody had credited under a heading saying they were created because
+ * someone said they use them. Imported profiles belong here once a real
+ * company credits them: Crisp arrived in the Generation 0 import and is in
+ * this group because TryAPI said it uses it.
+ */
 export function listCreditedCompanies(limit = 60) {
+  return listNetworkGroup(`${OPEN_PROFILE} AND ${HAS_CREDIT}`, [], limit);
+}
+
+/**
+ * Unclaimed, added by whoever runs the company, and not yet credited by
+ * anyone. These are people who walked in the door and stopped halfway: the
+ * most interesting group on the page, and the one the old query hid.
+ */
+export function listJoinedCompanies(limit = 60) {
   return listNetworkGroup(
-    `c.status != 'CLAIMED' AND c.network_eligible = 1
+    `${OPEN_PROFILE} AND NOT ${HAS_CREDIT}
        AND c.source NOT IN (${SOURCED_PLACEHOLDERS})`,
     [...SOURCED_BY_US],
     limit,
   );
 }
 
-/** Unclaimed, and here because we imported them. */
+/** Unclaimed, here because we imported them, and nobody has credited them. */
 export function listSourcedCompanies(limit = 24) {
   return listNetworkGroup(
-    `c.status != 'CLAIMED' AND c.network_eligible = 1
+    `${OPEN_PROFILE} AND NOT ${HAS_CREDIT}
        AND c.source IN (${SOURCED_PLACEHOLDERS})`,
     [...SOURCED_BY_US],
     limit,
@@ -992,28 +1025,39 @@ export function listIncumbentCompanies(limit = 60) {
   return listNetworkGroup("c.network_eligible = 0", [], limit);
 }
 
-/** How the companies table splits across those same four groups. */
+/**
+ * How the companies table splits across those same five groups.
+ *
+ * Written from the same two predicates as the lists above so a heading can
+ * never count one thing and show another.
+ */
 export async function getNetworkGroupCounts(): Promise<{
   claimed: number;
   credited: number;
+  joined: number;
   sourced: number;
   incumbents: number;
 }> {
   const { rows } = await getDb().execute({
     sql: `SELECT
-       SUM(CASE WHEN status = 'CLAIMED' THEN 1 ELSE 0 END) AS claimed,
-       SUM(CASE WHEN status != 'CLAIMED' AND network_eligible = 1
-                 AND source NOT IN (${SOURCED_PLACEHOLDERS}) THEN 1 ELSE 0 END) AS credited,
-       SUM(CASE WHEN status != 'CLAIMED' AND network_eligible = 1
-                 AND source IN (${SOURCED_PLACEHOLDERS}) THEN 1 ELSE 0 END) AS sourced,
-       SUM(CASE WHEN network_eligible = 0 THEN 1 ELSE 0 END) AS incumbents
-     FROM companies`,
+       SUM(CASE WHEN c.status = 'CLAIMED' THEN 1 ELSE 0 END) AS claimed,
+       SUM(CASE WHEN ${OPEN_PROFILE} AND ${HAS_CREDIT}
+                THEN 1 ELSE 0 END) AS credited,
+       SUM(CASE WHEN ${OPEN_PROFILE} AND NOT ${HAS_CREDIT}
+                 AND c.source NOT IN (${SOURCED_PLACEHOLDERS})
+                THEN 1 ELSE 0 END) AS joined,
+       SUM(CASE WHEN ${OPEN_PROFILE} AND NOT ${HAS_CREDIT}
+                 AND c.source IN (${SOURCED_PLACEHOLDERS})
+                THEN 1 ELSE 0 END) AS sourced,
+       SUM(CASE WHEN c.network_eligible = 0 THEN 1 ELSE 0 END) AS incumbents
+     FROM companies c`,
     args: [...SOURCED_BY_US, ...SOURCED_BY_US],
   });
   const row = (rows[0] ?? {}) as Record<string, unknown>;
   return {
     claimed: Number(row.claimed ?? 0),
     credited: Number(row.credited ?? 0),
+    joined: Number(row.joined ?? 0),
     sourced: Number(row.sourced ?? 0),
     incumbents: Number(row.incumbents ?? 0),
   };
@@ -1036,14 +1080,36 @@ export async function listCompaniesWithCounts(): Promise<CompanyWithCounts[]> {
   }));
 }
 
+/**
+ * The company pages worth submitting for indexing.
+ *
+ * Two filters, and both are about not asking for something we would not want
+ * granted. A profile with no edges has nothing on it that a search result
+ * could usefully lead to — the page says so itself — and a few thousand of
+ * them submitted at once is the shape of a doorway-page farm, which is a
+ * reputation this domain cannot afford while the graph is still small. They
+ * stay reachable and crawlable; they are simply not advertised until somebody
+ * has said something about them. Demo rows never belong in a sitemap at all.
+ *
+ * `updated_at`, not `created_at`: the schema keeps it current when a profile
+ * or its relationships change, which is exactly the event a crawler should
+ * come back for. Using the creation date froze every `lastmod` at import.
+ */
 export async function listAllCompanySlugs(): Promise<
-  { slug: string; createdAt: string }[]
+  { slug: string; updatedAt: string }[]
 > {
   const { rows } = await getDb().execute(
-    `SELECT slug, created_at FROM companies ORDER BY created_at DESC`,
+    `SELECT slug, updated_at FROM companies c
+      WHERE c.is_demo = 0
+        AND EXISTS (
+          SELECT 1 FROM relationships r
+           WHERE (r.source_company_id = c.id OR r.target_company_id = c.id)
+             AND r.state != 'DISPUTED'
+        )
+      ORDER BY updated_at DESC`,
   );
   return rows.map((row) => ({
     slug: str(row.slug),
-    createdAt: str(row.created_at),
+    updatedAt: str(row.updated_at),
   }));
 }

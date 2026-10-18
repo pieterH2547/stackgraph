@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Categories",
   description: `Browse independent software by category on ${brand.name}.`,
+  alternates: { canonical: "/categories" },
 };
 
 /**

@@ -17,7 +17,7 @@ import { track } from "./events";
 import { MAX_TOOLS, REQUIRED_UPSTREAM } from "./limits";
 import { notifyMention } from "./notify";
 import { suggestPoweredBy } from "./signals";
-import { normalizeSiteUrl } from "./url";
+import { hostedPage, hostedPageMessage, normalizeSiteUrl } from "./url";
 import type { Company, CompanySource, EdgeKind } from "./types";
 
 export { MAX_TOOLS, REQUIRED_UPSTREAM } from "./limits";
@@ -198,6 +198,18 @@ export async function submitStack(
         continue;
       }
     } else if (tool.website) {
+      /*
+       * The credit path is where a hosted page does the most damage: it does
+       * not just create a wrong profile, it creates one that owns the
+       * platform's domain, so every later company crediting that platform is
+       * silently pointed at somebody's form.
+       */
+      const page = hostedPage(tool.website);
+      if (page) {
+        errors.push(hostedPageMessage(page, tool.name ?? tool.website));
+        continue;
+      }
+
       let normalized;
       try {
         normalized = normalizeSiteUrl(tool.website);

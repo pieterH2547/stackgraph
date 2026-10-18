@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { decimal, padCount, percent } from "@/lib/format";
-import { getFlywheelMetrics } from "@/lib/metrics";
+import { getAcquisitionFunnel, getFlywheelMetrics } from "@/lib/metrics";
 import { isAdmin } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +15,10 @@ export const metadata: Metadata = {
 export default async function MetricsPage() {
   if (!(await isAdmin())) redirect("/admin");
 
-  const m = await getFlywheelMetrics();
+  const [m, funnel] = await Promise.all([
+    getFlywheelMetrics(),
+    getAcquisitionFunnel(),
+  ]);
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-12 sm:px-8">
@@ -31,6 +34,9 @@ export default async function MetricsPage() {
         The only question this MVP exists to answer. Profile count is not on
         this page on purpose — a node without edges is worth almost nothing.
       </p>
+
+      {/* The five steps, before any ratio is taken of them. */}
+      <AcquisitionFunnel funnel={funnel} />
 
       {/* K, with its four factors spelled out. */}
       <section className="card mt-8 p-6 sm:p-8">
@@ -258,5 +264,90 @@ function FunnelStep({
         />
       </div>
     </li>
+  );
+}
+
+/**
+ * The acquisition funnel, in one line of boxes.
+ *
+ * Deliberately five counts and the two conversions that sit between them,
+ * rather than a chart: at this size the numbers are readable and a chart
+ * would only make three of something look like a trend.
+ */
+function AcquisitionFunnel({
+  funnel,
+}: {
+  funnel: Awaited<ReturnType<typeof getAcquisitionFunnel>>;
+}) {
+  const steps = [
+    {
+      label: "Added themselves",
+      value: funnel.selfAdded,
+      note: "walked in through /add",
+    },
+    {
+      label: "Claim completed",
+      value: funnel.verifiedClaims,
+      note: "ownership established",
+    },
+    {
+      label: "Credits given",
+      value: funnel.outgoingCredits,
+      note: "tools they named",
+    },
+    {
+      label: "Profiles created",
+      value: funnel.mentionedProfiles,
+      note: "exist because of a credit",
+    },
+    {
+      label: "Came back and claimed",
+      value: funnel.followOnClaims,
+      note: "the flywheel turning twice",
+    },
+  ];
+
+  return (
+    <section className="card mt-8 p-6 sm:p-8">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <p className="label !mb-0">Acquisition funnel</p>
+        <p className="mono text-ink-3">
+          {percent(
+            funnel.selfAdded === 0
+              ? 0
+              : funnel.verifiedClaims / funnel.selfAdded,
+            0,
+          )}{" "}
+          finish their claim ·{" "}
+          {percent(
+            funnel.mentionedProfiles === 0
+              ? 0
+              : funnel.followOnClaims / funnel.mentionedProfiles,
+            0,
+          )}{" "}
+          of credited profiles come back
+        </p>
+      </div>
+
+      <ol className="mt-5 grid gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-5">
+        {steps.map((step) => (
+          <li key={step.label} className="bg-surface p-4">
+            <p className="mono text-[2rem] leading-none tracking-[-0.03em]">
+              {padCount(step.value)}
+            </p>
+            <p className="mt-2 text-sm font-medium leading-tight">{step.label}</p>
+            <p className="mono mt-1 text-ink-3">{step.note}</p>
+          </li>
+        ))}
+      </ol>
+
+      {funnel.followOnClaims === 0 && funnel.mentionedProfiles > 0 && (
+        <p className="mono mt-4 border-t border-line pt-4 text-ink-2">
+          No credited profile has claimed yet. The wheel has turned once, from
+          the companies that added themselves — it has not yet turned on its
+          own.
+        </p>
+      )}
+    </section>
   );
 }

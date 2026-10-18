@@ -61,6 +61,15 @@ export async function generateMetadata({
   return {
     title,
     description,
+    /*
+     * A profile nobody has connected yet has nothing on it that a search
+     * result could lead to, and the page says as much in its own words. A
+     * few thousand of those asking to be indexed at once is the shape of a
+     * doorway-page farm, so they stay crawlable — the links out of them are
+     * the point — and ask to be left out until somebody says something.
+     */
+    robots:
+      incoming + outgoing === 0 ? { index: false, follow: true } : undefined,
     alternates: { canonical: `/c/${company.slug}` },
     openGraph: {
       title: `${title} · ${brand.name}`,

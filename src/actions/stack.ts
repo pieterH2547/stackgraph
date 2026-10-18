@@ -15,7 +15,7 @@ import {
   type StackToolInput,
 } from "@/lib/network";
 import { MAX_TOOLS } from "@/lib/limits";
-import { canEdit } from "@/lib/session";
+import { canActFor } from "@/lib/auth/session";
 import { routes } from "@/lib/routes";
 import { track } from "@/lib/events";
 
@@ -60,7 +60,7 @@ export async function saveStack(
 ): Promise<StackFormState> {
   const company = await getCompanyBySlug(slug);
   if (!company) return { error: "That company doesn't exist." };
-  if (!(await canEdit(company.id))) {
+  if (!(await canActFor(company.id))) {
     return { error: "This isn't your company to edit." };
   }
 
@@ -103,7 +103,7 @@ export async function disputeRelationship(
 ): Promise<void> {
   const edge = await getEdgeById(relationshipId);
   if (!edge) return;
-  if (!(await canEdit(edge.target.id))) return;
+  if (!(await canActFor(edge.target.id))) return;
 
   await deleteRelationship(edge.id);
 
@@ -136,7 +136,7 @@ export async function disputeRelationship(
 export async function retractCredit(relationshipId: string): Promise<void> {
   const edge = await getEdgeById(relationshipId);
   if (!edge) return;
-  if (!(await canEdit(edge.source.id))) return;
+  if (!(await canActFor(edge.source.id))) return;
 
   await deleteRelationship(edge.id);
 

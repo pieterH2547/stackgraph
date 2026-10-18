@@ -24,6 +24,14 @@ export async function generateMetadata({
   return {
     title: `${company.name}'s stack`,
     description,
+    /*
+     * The same company as `/c/<slug>`, with the same edges and a different
+     * frame. This page exists to be opened from a shared link, not to
+     * compete with the profile for the same query, so it points at the
+     * profile and asks to stay out of the index itself.
+     */
+    robots: { index: false, follow: true },
+    alternates: { canonical: `/c/${company.slug}` },
     openGraph: {
       title: `What ${company.name} runs on`,
       description,

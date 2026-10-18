@@ -15,6 +15,8 @@
  * what actually answers activity, contactability and stack richness.
  */
 
+import { isHomepagePath } from "../url";
+
 /** Positive evidence, negative evidence, or no idea. Never a guess. */
 export type Signal = "yes" | "no" | "unknown";
 
@@ -229,9 +231,14 @@ const FREE_HOST =
  * domain of its own, and whoever owns the product can still claim it properly
  * later. A trailing slash, `/en`, `/home` and the like are not paths in this
  * sense: they are the homepage with decoration.
+ *
+ * The import is stricter than the rest of the app on purpose. Here *any* path
+ * disqualifies a row, because a directory listing that cannot name a homepage
+ * has told us it does not know one. A person adding their own company may
+ * paste a deep link to a page on a domain that really is theirs, so the live
+ * flows only refuse a path on somebody else's platform — `hostedPage` in
+ * `lib/url.ts`. Both tests share one definition of "this is the homepage".
  */
-const HOMEPAGE_PATH = /^\/(?:[a-z]{2}(?:-[a-z]{2})?|home|index(?:\.html?|\.php)?)?\/?$/i;
-
 export function linksToAPage(rawWebsite: string): boolean {
   const input = rawWebsite.trim();
   if (!input) return false;
@@ -239,7 +246,7 @@ export function linksToAPage(rawWebsite: string): boolean {
     const { pathname } = new URL(
       /^https?:\/\//i.test(input) ? input : `https://${input}`,
     );
-    return !HOMEPAGE_PATH.test(pathname);
+    return !isHomepagePath(pathname);
   } catch {
     return false;
   }

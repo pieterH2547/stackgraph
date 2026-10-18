@@ -64,6 +64,31 @@ export async function canManage(companyId: string): Promise<boolean> {
   return (await roleFor(companyId)) !== null;
 }
 
+/**
+ * May this request act for this company at all?
+ *
+ * Two things grant it, and they are not interchangeable:
+ *
+ *  - a row in `company_members`, written only after the ownership flow
+ *    established identity. This survives a new laptop, and it is the one the
+ *    product means by ownership.
+ *  - the legacy edit-token cookie, from before accounts existed. Still
+ *    honoured so a claim made in that browser keeps working.
+ *
+ * Both were already accepted by the profile page when it decided whether to
+ * render the dispute and retract controls, but the server actions behind
+ * those controls checked only the cookie. An owner who verified on their
+ * phone and came back on a laptop saw their own buttons do nothing: the
+ * action took the silent-return path meant for strangers. Membership is the
+ * stronger proof of the two, so accepting it here does not widen who may act
+ * — it stops the weaker proof being mandatory.
+ */
+export async function canActFor(companyId: string): Promise<boolean> {
+  if (await canManage(companyId)) return true;
+  const { canEdit } = await import("../session");
+  return canEdit(companyId);
+}
+
 export class NotSignedIn extends Error {
   constructor() {
     super("Sign in to do that.");
