@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { CATEGORIES } from "@/lib/brand";
 import {
+  deleteCompany,
   getCompanyById,
   listIncomingEdges,
   updateCompany,
@@ -105,6 +106,45 @@ export async function saveCompany(
   revalidatePath(`/admin/${companyId}`);
   revalidatePath(`/c/${company.slug}`);
   return { message: "Saved." };
+}
+
+/**
+ * Take a company off the graph. The domain has to be typed back, because
+ * this is the one admin action with no undo, and a profile that a dozen
+ * companies credit should never leave on a misclick.
+ */
+export async function removeCompany(
+  companyId: string,
+  _state: AdminFormState,
+  formData: FormData,
+): Promise<AdminFormState> {
+  await requireAdmin();
+
+  const company = await getCompanyById(companyId);
+  if (!company) return { error: "Gone." };
+
+  const typed = String(formData.get("confirmDomain") ?? "").trim().toLowerCase();
+  if (typed !== company.domain) {
+    return { error: `Type ${company.domain} to confirm.` };
+  }
+
+  const result = await deleteCompany(companyId);
+  if (!result) return { error: "Gone." };
+
+  const also = result.alsoRemoved.map((c) => c.domain);
+  console.info(
+    `[whouseswhat] admin removed ${company.domain}: ${result.edges} edges, also removed ${also.length ? also.join(", ") : "nothing else"}`,
+  );
+
+  revalidatePath("/");
+  revalidatePath("/network");
+  revalidatePath("/admin");
+  revalidatePath(`/c/${company.slug}`);
+  for (const gone of result.alsoRemoved) revalidatePath(`/c/${gone.slug}`);
+
+  const query = new URLSearchParams({ removed: company.domain });
+  if (also.length) query.set("also", also.join(","));
+  redirect(`/admin?${query}`);
 }
 
 /** Re-send a claim invitation, skipping the cooldown. */

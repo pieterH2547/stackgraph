@@ -198,7 +198,7 @@ only affect that one path on the host.
 | `/claim/[slug]/verify` | One button, then straight back into the flywheel |
 | `/share/[slug]` | A shareable card that credits the *other* tools |
 | `/network` | Everything, grouped by claimed / credited-not-claimed / incumbents |
-| `/admin`, `/admin/metrics` | Seeding, per-company inspection, and the K-factor |
+| `/admin`, `/admin/metrics` | Seeding, per-company inspection and removal, and the K-factor |
 
 ### Progressive unlock
 

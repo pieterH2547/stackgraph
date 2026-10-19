@@ -2,9 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ActionButton } from "@/components/ActionButton";
-import { CompanyEditForm } from "@/components/admin/AdminForms";
+import {
+  CompanyEditForm,
+  RemoveCompanyForm,
+} from "@/components/admin/AdminForms";
 import { CompanyInline } from "@/components/CompanyCard";
-import { resendInvite, saveCompany } from "@/actions/admin";
+import { removeCompany, resendInvite, saveCompany } from "@/actions/admin";
 import { listClaimsForCompany } from "@/lib/claims";
 import {
   getCompanyById,
@@ -146,6 +149,14 @@ export default async function AdminCompanyPage({
             </p>
           ))}
         </div>
+      </section>
+
+      {/* Last, and apart: the one action here that cannot be taken back. */}
+      <section className="mt-14 border-t border-line pt-10">
+        <RemoveCompanyForm
+          action={removeCompany.bind(null, company.id)}
+          company={company}
+        />
       </section>
     </main>
   );
