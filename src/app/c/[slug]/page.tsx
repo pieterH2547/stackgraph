@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import { CompanyLogo } from "@/components/CompanyLogo";
 import { CompanyInline } from "@/components/CompanyCard";
 import { LocalGraph } from "@/components/LocalGraph";
@@ -8,6 +9,7 @@ import { RelationshipJudge } from "@/components/RelationshipJudge";
 import { ShareRow } from "@/components/ShareRow";
 import { SponsorPanel } from "@/components/SponsorCard";
 import { disputeRelationship, trackShare } from "@/actions/stack";
+import { badgeAvailable, recordBadgeClick } from "@/lib/badge/stats";
 import { brand } from "@/lib/brand";
 import { companiesCount, companiesSay, padCount, timeAgo } from "@/lib/format";
 import {
@@ -105,10 +107,22 @@ export async function generateMetadata({
  * It is picked from the sponsors table and nothing else, so it cannot change
  * a relationship, a count, or the order anything above appears in.
  */
-export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
-  const { slug } = await params;
+export default async function CompanyPage({
+  params,
+  searchParams,
+}: PageProps<"/c/[slug]">) {
+  const [{ slug }, query] = await Promise.all([params, searchParams]);
   const company = await getCompanyBySlug(slug);
   if (!company) notFound();
+
+  /*
+   * Arrived through the company's badge on its own site. Counted after the
+   * page has gone out, as one tally for the day — not who, not from where.
+   */
+  if (query.ref === "badge" && badgeAvailable(company)) {
+    const companyId = company.id;
+    after(() => recordBadgeClick(companyId));
+  }
 
   const { outgoing, incoming, usedByCount } = await getProfile(company);
   const [manages, legacyEditor, onNetwork, liveSponsors] = await Promise.all([
@@ -341,13 +355,31 @@ export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
           {/* 6 — provenance, stated plainly and without a wall of legal copy */}
           <footer className="mt-16 border-t border-line pt-7">
             <div className="flex flex-wrap items-end justify-between gap-6">
-              <div>
-                <p className="label">Share this stack</p>
-                <ShareRow
-                  url={absoluteUrl(`/share/${company.slug}`)}
-                  text={stackShareText(company, outgoing)}
-                  onShare={trackShare.bind(null, company.slug)}
-                />
+              <div className="flex flex-wrap gap-x-10 gap-y-6">
+                <div>
+                  <p className="label">Share this stack</p>
+                  <ShareRow
+                    url={absoluteUrl(`/share/${company.slug}`)}
+                    text={stackShareText(company, outgoing)}
+                    onShare={trackShare.bind(null, company.slug)}
+                  />
+                </div>
+                {/*
+                 * The badge: the `Used by` count, for the company's own site.
+                 * Claimed profiles only — a number on somebody's site under
+                 * our name has to be one they can stand behind and dispute.
+                 */}
+                {badgeAvailable(company) && (
+                  <div>
+                    <p className="label">For your site</p>
+                    <Link
+                      href={routes.badge(company.slug)}
+                      className="btn btn-secondary !py-2 !text-sm"
+                    >
+                      {brand.badge.cta}
+                    </Link>
+                  </div>
+                )}
               </div>
               <div className="mono max-w-sm space-y-1.5 text-ink-3">
                 <p>

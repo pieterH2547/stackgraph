@@ -144,7 +144,7 @@ build a schema in a local file instead.
 
 ```bash
 npm run verify           # typecheck + lint + tests + production build
-npm test                 # 181 tests, no network, no mail provider
+npm test                 # 214 tests, no network, no mail provider
 ```
 
 ### Environment
@@ -195,6 +195,8 @@ only affect that one path on the host.
 | `/stack/[slug]` | **The unlock page.** One task: *Add 2 tools you genuinely use*, with one-click suggestions read from your own site. Every tool you pick states its own consequence — "Tally gets: Used by Acme" — because that consequence is the product. |
 | `/done/[slug]` | ✓ Claimed · ✓ See who uses you · ✓ Your network is live |
 | `/c/[slug]` | The public profile: local graph, Used by, Powered by |
+| `/c/[slug]/badge` | Pick up the badge and its embed code (claimed profiles) |
+| `/badge/[slug].svg` | The badge image other sites load; `?theme=dark` for dark pages |
 | `/claim/[slug]` | Curiosity first: *N companies say they use your product, M are on the network* |
 | `/claim/[slug]/verify` | One button, then straight back into the flywheel |
 | `/share/[slug]` | A shareable card that credits the *other* tools |
@@ -241,6 +243,45 @@ Incumbent rules are not explained up front. Add Stripe and it stays in your
 stack, labelled where you can see it:
 
 > Part of your stack · doesn't count toward the 2 independent tools
+
+### The badge
+
+A claimed company can put its `Used by` count on its own site:
+
+> **12 software companies** · SAY THEY USE ACME
+
+It is the profile's own sentence, so the badge can never promise more than
+the profile does. Twelve companies said, in their own name, that Acme is in
+their stack; nobody checked them, and the badge says so inside the image
+(`<desc>`: self-reported, not a verified customer list). What it counts is
+exactly what the profile shows: non-disputed relationships from real
+companies. Demo rows are excluded, and a demo or unclaimed company gets no
+badge at all — a number on somebody else's website under our name has to be
+one they can stand behind and dispute. Zero is rendered as the one true thing
+("Acme · ON WHO USES WHAT"), never as a number.
+
+The badge is optional in every direction. Nothing depends on it: not the
+claim, not the profile, not where a company appears.
+
+**Links.** Google's spam policies name widely distributed widget links as a
+pattern to avoid, and a badge is exactly such a widget. So the embed page
+offers two snippets and the site owner chooses: the image inside a link to
+the public profile with `rel="nofollow"` (for readers, not for rankings), or
+the image alone with no link. The alt text is one plain sentence without the
+count, because the HTML on somebody's site does not update. No hidden links,
+no keyword text, no footer requirement.
+
+**Caching.** Every visitor of every embedding site fetches the image, so it
+is cached at three distances and allowed to lag the profile by up to an hour:
+`max-age=300` in the browser, `s-maxage=3600, stale-while-revalidate` at the
+CDN, a 60-second memo per slug at the origin, and an `ETag` for `304`s. An
+unknown slug is cached briefly too.
+
+**Measurement.** `badge_stats` holds one row per company per UTC day with two
+counters: loads that reached the origin (cached loads are missed, by design)
+and arrivals on the profile via `?ref=badge`. No IP address, user agent,
+referrer or cookie is kept, and the owner's own preview is not counted. The
+company sees the last 30 days on its badge page, with that caveat stated.
 
 ---
 
@@ -354,7 +395,8 @@ src/
     notify.ts              recognition emails, dedupe and cooldown
     metrics.ts             the four-factor K and cycle time
     graph.ts               deterministic graph geometry
-  test/                    181 tests over the whole loop, and the sponsor wall
+    badge/                 the embeddable badge: svg, embed code, stats, serving
+  test/                    214 tests over the whole loop, and the sponsor wall
 scripts/                   db:push, db:seed, db:reset, db:inspect,
                            launchllama:score, launchllama:import
 ```
@@ -380,6 +422,8 @@ email SDK — one dependency beyond the framework.
   No foreign key into the graph, on purpose.
 - **sponsor_events** — impressions and clicks with a `is_bot` and `is_repeat`
   flag each; a daily-rotating visitor hash and no IP, user agent or cookie
+- **badge_stats** — one row per company per day: badge loads and
+  click-throughs, nothing about who
 
 ---
 

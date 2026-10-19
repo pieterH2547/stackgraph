@@ -84,6 +84,22 @@ export const brand = {
   stackPromptSupport:
     "They’ll appear on your stack. Your company will appear in their “Used by”.",
 
+  /* --- the badge ------------------------------------------------------- */
+  /*
+   * A claimed company can put its `Used by` count on its own site. The badge
+   * is optional and buys nothing here: no claim, no verification, no
+   * placement depends on it. It exists because "twelve companies say they use
+   * this" is worth showing, and because it should be shown in exactly the
+   * words the profile uses.
+   */
+  badge: {
+    cta: "Get your badge",
+    heading: "A badge for your site",
+    /** The one-line truth under every preview. */
+    honesty:
+      "Counts companies that say they use you — their statements about their own stacks. Not a verified customer list.",
+  },
+
   footerLine: "The independent software graph.",
   footerAside:
     "The enemy was never enterprise software. It's a discovery model that makes independent products invisible.",

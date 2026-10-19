@@ -23,6 +23,8 @@ export default function robots(): MetadataRoute.Robots {
         "/auth/",
         // A query surface, not a page worth indexing.
         "/search",
+        // The embed-code page. The badge image itself stays crawlable.
+        "/c/*/badge",
       ],
     },
     sitemap: absoluteUrl("/sitemap.xml"),
