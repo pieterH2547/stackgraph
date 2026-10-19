@@ -12,11 +12,14 @@ export function ManageStack({
   companyName,
   companyDomain,
   existingCredits,
+  requiredCredits = 0,
 }: {
   slug: string;
   companyName: string;
   companyDomain: string;
   existingCredits: number;
+  /** Two while the claim is unfinished, so the editor shows what is left. */
+  requiredCredits?: number;
 }) {
   const action = async (
     _state: ManageState,
@@ -29,9 +32,9 @@ export function ManageStack({
       companyName={companyName}
       companyDomain={companyDomain}
       existingCredits={existingCredits}
-      requiredCredits={0}
+      requiredCredits={requiredCredits}
       suggestionsFor={slug}
-      submitLabel="Add to our stack"
+      submitLabel={requiredCredits > 0 ? "Save and claim" : "Add to our stack"}
     />
   );
 }

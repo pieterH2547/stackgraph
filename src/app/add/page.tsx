@@ -8,7 +8,11 @@ export const metadata: Metadata = {
   description: brand.heroSubline,
 };
 
-export default function AddPage() {
+export default async function AddPage({ searchParams }: PageProps<"/add">) {
+  const query = await searchParams;
+  const domain = typeof query.domain === "string" ? query.domain : "";
+  const refused = query.error === "not-your-domain";
+
   return (
     <main className="mx-auto max-w-6xl px-5 py-14 sm:px-8 sm:py-20">
       <p className="mono text-ink-3">Step 1 of 3</p>
@@ -17,8 +21,17 @@ export default function AddPage() {
       </h1>
       <p className="mt-5 max-w-lg text-lg leading-relaxed text-ink-2">
         Paste your website. If someone already named you, we&apos;ll take you
-        to the profile that&apos;s waiting — otherwise we&apos;ll start one.
+        to the profile that&apos;s waiting — otherwise we&apos;ll start one,
+        once you confirm an address on that domain.
       </p>
+
+      {refused && (
+        <p className="mt-6 max-w-lg border-l-2 border-accent pl-3 text-sm text-accent-ink">
+          That address isn&apos;t on {domain || "the company's domain"}, so
+          nothing was added. A company can only add itself: use an address on
+          its own domain.
+        </p>
+      )}
 
       <WebsiteForm action={submitWebsite} />
     </main>

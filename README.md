@@ -67,10 +67,21 @@ there put the product in their own stack and said so in their own name.
 
 A profile turns `CLAIMED` when, and only when:
 
-1. identity is settled (an emailed link, or the founder added the company), **and**
+1. identity is proved: an emailed link opened, or Google, on an address at the
+   company's own domain (anything else waits for a human), **and**
 2. two **network-eligible** tools have been credited (`REQUIRED_UPSTREAM`).
 
-That is the entire gate, and it lives in `src/lib/limits.ts`. Nobody named has
+That is the entire gate, and it lives in `src/lib/limits.ts`. Proving
+the address makes you the company's manager; it does not make the profile
+CLAIMED on its own — that still takes the two tools.
+
+A company can only add **itself**. *Claim your company* used to create the
+profile on submit and hand that browser the right to edit it, so anybody
+could type facebook.com, name two tools and see it marked claimed. Now the
+typed profile waits as a draft next to a sign-in link sent to an address on
+that domain, and only opening the link creates it. Other companies can still
+name a tool that is not on the graph yet: it appears as an unclaimed profile
+on their word, which is the flywheel. Nobody named has
 to confirm anything: a claim that depended on other people would stall the
 whole network.
 
@@ -144,7 +155,7 @@ build a schema in a local file instead.
 
 ```bash
 npm run verify           # typecheck + lint + tests + production build
-npm test                 # 214 tests, no network, no mail provider
+npm test                 # 230 tests, no network, no mail provider
 ```
 
 ### Environment
@@ -191,7 +202,7 @@ only affect that one path on the host.
 | --- | --- |
 | `/` | The global graph, then the hero search, recently connected, growing networks, the manifesto |
 | `/add` | One field: your website. Called *Claim your company*, because half the companies people look for already have a profile waiting — paste a domain that exists and you land on its claim page. |
-| `/add/confirm` | "We found this" — name, one line, for whom, built by, category |
+| `/add/confirm` | "We found this" — name, one line, for whom, built by, category — and an address on the company's own domain. Nothing is created until the link sent there is opened: a company can only add itself. |
 | `/stack/[slug]` | **The unlock page.** One task: *Add 2 tools you genuinely use*, with one-click suggestions read from your own site. Every tool you pick states its own consequence — "Tally gets: Used by Acme" — because that consequence is the product. |
 | `/done/[slug]` | ✓ Claimed · ✓ See who uses you · ✓ Your network is live |
 | `/c/[slug]` | The public profile: local graph, Used by, Powered by |
@@ -396,7 +407,7 @@ src/
     metrics.ts             the four-factor K and cycle time
     graph.ts               deterministic graph geometry
     badge/                 the embeddable badge: svg, embed code, stats, serving
-  test/                    214 tests over the whole loop, and the sponsor wall
+  test/                    230 tests over the whole loop, and the sponsor wall
 scripts/                   db:push, db:seed, db:reset, db:inspect,
                            launchllama:score, launchllama:import
 ```

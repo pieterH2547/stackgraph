@@ -54,7 +54,7 @@ export default async function SignInPage({
 
       <p className="mt-4 max-w-md leading-relaxed text-ink-2">
         {company
-          ? "Fill in what you want on your profile, then confirm your address. An address on your company's own domain is in straight away; anything else we check by hand first."
+          ? "Fill in what you want on your profile, then confirm your address. An address on your company's own domain is in straight away, and naming two tools you use finishes the claim; anything else we check by hand first."
           : "No password. We send a link, or Google vouches for you."}
       </p>
 
