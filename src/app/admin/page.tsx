@@ -4,6 +4,7 @@ import { AdminLoginForm, SeedCompanyForm } from "@/components/admin/AdminForms";
 import { StatusBadge } from "@/components/StatusBadge";
 import { adminLogin, seedCompany } from "@/actions/admin";
 import { getNetworkStats, listCompaniesWithCounts } from "@/lib/db/queries";
+import { routes } from "@/lib/routes";
 import { isAdmin } from "@/lib/session";
 import { padCount, timeAgo } from "@/lib/format";
 
@@ -39,9 +40,17 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
     <main className="mx-auto max-w-6xl px-5 py-12 sm:px-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <h1 className="text-3xl font-medium tracking-tight">Admin</h1>
-        <Link href="/admin/metrics" className="btn btn-secondary !py-2 !text-sm">
-          Flywheel metrics
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={routes.adminSponsors()}
+            className="btn btn-secondary !py-2 !text-sm"
+          >
+            Sponsors
+          </Link>
+          <Link href="/admin/metrics" className="btn btn-secondary !py-2 !text-sm">
+            Flywheel metrics
+          </Link>
+        </div>
       </div>
 
       {removed && (

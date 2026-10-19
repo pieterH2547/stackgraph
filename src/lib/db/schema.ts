@@ -187,9 +187,66 @@ CREATE TABLE IF NOT EXISTS events (
 
 CREATE INDEX IF NOT EXISTS events_name_idx    ON events (name);
 CREATE INDEX IF NOT EXISTS events_created_idx ON events (created_at);
+
+-- A paid placement. Deliberately its own table with no foreign key into
+-- companies or relationships: a sponsor is an advertiser, not a node in the
+-- graph, and nothing here can touch an edge, a claim or an ordering. The
+-- card it buys is labelled "Sponsored" wherever it appears.
+--
+-- One row is one contract: the creative plus the window it runs in and the
+-- package it was sold under. The price is snapshotted in cents so a later
+-- change to the rate card never rewrites a running agreement. No payment
+-- flow exists; invoicing happens off-site for now.
+CREATE TABLE IF NOT EXISTS sponsors (
+  id                  TEXT PRIMARY KEY,
+  name                TEXT NOT NULL,
+  logo_url            TEXT,
+  -- At most 120 characters, enforced in code. One line, not a pitch.
+  description         TEXT NOT NULL,
+  destination_url     TEXT NOT NULL,
+  -- SIDEBAR or CATEGORY. Only the sidebar placement renders today.
+  package             TEXT NOT NULL DEFAULT 'SIDEBAR',
+  monthly_price_cents INTEGER,
+  currency            TEXT NOT NULL DEFAULT 'EUR',
+  -- JSON array of category names the placement is limited to, or NULL for
+  -- every profile.
+  categories          TEXT,
+  active              INTEGER NOT NULL DEFAULT 0,
+  -- Inclusive calendar dates (YYYY-MM-DD, UTC). NULL means open-ended.
+  starts_on           TEXT,
+  ends_on             TEXT,
+  contact_email       TEXT,
+  notes               TEXT,
+  created_at          TEXT NOT NULL,
+  updated_at          TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS sponsors_active_idx ON sponsors (active, starts_on, ends_on);
+
+-- One row per impression or click. Nothing in it identifies a person: no
+-- IP, no user agent, no cookie. visitor_key is a keyed hash of IP and user
+-- agent that rotates daily, kept only so a repeat from the same browser on
+-- the same day can be told from a new reader. is_bot and is_repeat are
+-- decided at write time so the report can show raw next to filtered.
+CREATE TABLE IF NOT EXISTS sponsor_events (
+  id          TEXT PRIMARY KEY,
+  sponsor_id  TEXT NOT NULL REFERENCES sponsors (id) ON DELETE CASCADE,
+  kind        TEXT NOT NULL,
+  -- Where it was shown: the profile path, never a query string.
+  page        TEXT,
+  visitor_key TEXT,
+  is_bot      INTEGER NOT NULL DEFAULT 0,
+  is_repeat   INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS sponsor_events_sponsor_idx ON sponsor_events (sponsor_id, kind, created_at);
+CREATE INDEX IF NOT EXISTS sponsor_events_visitor_idx ON sponsor_events (sponsor_id, kind, visitor_key);
 `;
 
 export const TABLES = [
+  "sponsor_events",
+  "sponsors",
   "login_tokens",
   "company_members",
   "sessions",

@@ -144,6 +144,12 @@ function SiteFooter() {
           >
             The network
           </Link>
+          <Link
+            href={routes.advertise()}
+            className="mono text-ink-2 transition-colors hover:text-accent-ink"
+          >
+            Advertise
+          </Link>
           <span className="mono text-ink-3">{brand.wordmark} · MVP</span>
         </div>
       </div>

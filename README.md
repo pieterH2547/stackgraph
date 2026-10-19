@@ -144,7 +144,7 @@ build a schema in a local file instead.
 
 ```bash
 npm run verify           # typecheck + lint + tests + production build
-npm test                 # 104 tests, no network, no mail provider
+npm test                 # 180 tests, no network, no mail provider
 ```
 
 ### Environment
@@ -156,6 +156,7 @@ npm test                 # 104 tests, no network, no mail provider
 | `NEXT_PUBLIC_SITE_URL` | Used for share links, claim links and OG images. Falls back to the Vercel URL. |
 | `RESEND_API_KEY` | With no key, every notification is written to the `notifications` table and printed to the log instead of being delivered. In development (`next dev`) sign-in and claim links are then shown on screen so the loop stays walkable locally. Never on a production or Vercel deployment: there a missing key makes "Email me a link" refuse with a clear message, because a link on screen signs in whoever typed the address and a domain-matching address is approved as owner on the spot. A provider error (an unverified sender domain, say) is reported as a failure too, not as "Link sent". |
 | `ADMIN_TOKEN` | Unlocks `/admin`. Unset means admin is unreachable. |
+| `SPONSOR_SALT` | Key material for the daily-rotating hash that tells a repeat sponsor impression from a new one. Optional: without it each server process picks its own, which is just as private but means two serverless instances can each count the same browser once. |
 | `DISABLE_SITE_DETECTION=1` | Never read vendor websites (used by the test suite). |
 | `NEXT_PUBLIC_BASE_PATH` | Serve the app under a path, e.g. `/test1`, when another site rewrites a subpath to it. Internal links, assets, API calls, share links, claim links and canonicals all pick it up. |
 | `NEXT_PUBLIC_NOINDEX=1` | Every page goes `noindex, nofollow` and robots.txt disallows everything. Use it for any staging copy, and for a test mount on a domain that isn't ours. |
@@ -198,7 +199,9 @@ only affect that one path on the host.
 | `/claim/[slug]/verify` | One button, then straight back into the flywheel |
 | `/share/[slug]` | A shareable card that credits the *other* tools |
 | `/network` | Everything, grouped by claimed / credited-not-claimed / incumbents |
+| `/advertise` | What a sponsored card is, what it is not, and one email address. No form, no price. |
 | `/admin`, `/admin/metrics` | Seeding, per-company inspection and removal, and the K-factor |
+| `/admin/sponsors` | Sponsors: create, schedule, switch on and off, and the impression / click / CTR report |
 
 ### Progressive unlock
 
@@ -272,17 +275,68 @@ same handful of names would sit on top of it forever.
 
 ---
 
+## Sponsorship
+
+One paid placement exists: a compact card beside a company profile, labelled
+**Sponsored**, with a logo, a name, one line of at most 120 characters and a
+link carrying `rel="sponsored noopener noreferrer"`. On a wide screen it sits
+in a narrow column to the right of the profile; on a phone it follows the
+claim invitation, so it is never above the proof or above the claim. A page
+with no live sponsor shows no empty box, only a quiet *Advertise on Who Uses
+What* line in the footer.
+
+What a sponsor buys is the card. What it cannot buy is structural: the
+`sponsors` table has no foreign key into `companies` or `relationships`, the
+sponsor modules contain no query into either, and the one ordering decision
+sponsorship makes — which sponsor a page shows — orders sponsors, never
+companies. A test holds both of those. "No pay-to-play rankings" in the
+manifesto still means what it says.
+
+`/admin/sponsors` manages them: name, logo URL, description, destination URL,
+package, monthly price, categories, active flag and an inclusive start and
+end date. Destination and logo URLs are validated the same way a company
+website is — public host, http(s) only, no credentials, no control characters
+— and logos must be https because they are embedded on our pages. Two test
+packages are defined in `src/lib/sponsors.ts` (Sidebar Sponsor and Category
+Sponsor) with prices that appear in admin and nowhere public; the price is
+snapshotted on the row in cents so a later rate change leaves a running
+agreement alone. There is no checkout, no payment integration and no sponsor
+account: `/advertise` ends in an email address.
+
+### Measuring it without measuring people
+
+The card sends two beacons from the browser: one once it has been half on
+screen, one on click. No analytics cookie is set and none is read. The server
+stores the sponsor, the kind, the page path and two flags decided at write
+time: whether the user agent announced itself as a crawler, and whether the
+same browser already produced this event for this sponsor today. "Same
+browser" is an HMAC of IP and user agent under a key that rotates every UTC
+day (`SPONSOR_SALT`); the hash is stored, the IP and user agent are not, and
+tomorrow's key cannot be matched to today's. A visitor sending Global Privacy
+Control is not hashed at all and is counted once.
+
+The report shows **filtered / raw** side by side. Raw is every beacon that
+reached the server; filtered drops crawlers and same-day repeats, and CTR is
+quoted on the filtered numbers. Past ten repeats from one key in a day,
+further ones are dropped rather than stored. All of it lives in two tables
+(`sponsors`, `sponsor_events`) in the same database as everything else.
+
+---
+
 ## Architecture
 
 ```
 src/
   app/                     routes (App Router, every data page dynamic)
-  actions/                 server actions: company, stack, claim, admin
-  components/              UI, incl. StackEditor, LocalGraph, GlobalGraph
+  actions/                 server actions: company, stack, claim, admin, sponsors
+  components/              UI, incl. StackEditor, LocalGraph, GlobalGraph, SponsorCard
   lib/
-    db/schema.ts           the whole data model, 5 tables
+    db/schema.ts           the whole data model
     db/client.ts           one libSQL client, lazy schema
     db/queries.ts          typed SQL, no ORM
+    db/sponsors.ts         sponsors, their events, and the filtered/raw report
+    sponsors.ts            packages, validation, when a sponsor runs, which one shows
+    sponsor-events.ts      bot detection and the daily visitor hash, no cookie
     network.ts             the flywheel: addCompany, submitStack,
                            settleClaim, classifyEdge
     limits.ts              the claim price, in one place
@@ -292,7 +346,7 @@ src/
     notify.ts              recognition emails, dedupe and cooldown
     metrics.ts             the four-factor K and cycle time
     graph.ts               deterministic graph geometry
-  test/                    56 tests over the whole loop
+  test/                    180 tests over the whole loop, and the sponsor wall
 scripts/                   db:push, db:seed, db:reset, db:inspect,
                            launchllama:score, launchllama:import
 ```
@@ -313,19 +367,27 @@ email SDK — one dependency beyond the framework.
 - **notifications** — every invitation, sent or queued, with the mention count
   at the time
 - **events** — the funnel, and nothing else
+- **sponsors** — one row per sponsored placement: creative, package, price
+  snapshot in cents, categories, active flag, inclusive start and end dates.
+  No foreign key into the graph, on purpose.
+- **sponsor_events** — impressions and clicks with a `is_bot` and `is_repeat`
+  flag each; a daily-rotating visitor hash and no IP, user agent or cookie
 
 ---
 
 ## Deliberately not built
 
-No payments, subscriptions, sponsorships or monetisation. No marketplace,
-launch rankings, reviews, star ratings, voting, upvotes or comments. No buyer
-intent, procurement, deals, vendor intelligence or competitive analytics. No
-chat, DMs, jobs, community feed, affiliate links, mobile app, browser
-extension, integration marketplace or SEO content engine. No vendor dashboard.
+No payments, subscriptions or checkout. No marketplace, launch rankings,
+reviews, star ratings, voting, upvotes or comments. No buyer intent,
+procurement, deals, vendor intelligence or competitive analytics. No chat,
+DMs, jobs, community feed, affiliate links, mobile app, browser extension,
+integration marketplace or SEO content engine. No vendor dashboard. No ad
+network.
 
-Monetisation is a question for after generation 2, 3 and 4 demonstrably exist
-on their own.
+The one monetisation surface is the labelled sponsored card above, built so
+that the question of whether to sell it can be answered with a report rather
+than a guess. Everything it must never touch — relationships, claims,
+orderings — is held by a test, not by a promise.
 
 ---
 

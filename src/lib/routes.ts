@@ -25,6 +25,9 @@ export const routes = {
   signInFor: (slug: string) => `/signin?claim=${encodeURIComponent(slug)}`,
   dashboard: () => "/dashboard",
   manage: (slug: string) => `/manage/${slug}`,
+  advertise: () => "/advertise",
+  adminSponsors: () => "/admin/sponsors",
+  adminSponsor: (id: string) => `/admin/sponsors/${id}`,
 } as const;
 
 /**

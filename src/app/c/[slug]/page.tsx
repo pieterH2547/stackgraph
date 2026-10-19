@@ -6,6 +6,7 @@ import { CompanyInline } from "@/components/CompanyCard";
 import { LocalGraph } from "@/components/LocalGraph";
 import { RelationshipJudge } from "@/components/RelationshipJudge";
 import { ShareRow } from "@/components/ShareRow";
+import { SponsorCard } from "@/components/SponsorCard";
 import { disputeRelationship, trackShare } from "@/actions/stack";
 import { brand } from "@/lib/brand";
 import { companiesCount, companiesSay, padCount, timeAgo } from "@/lib/format";
@@ -14,11 +15,13 @@ import {
   getCompanyBySlug,
   getEdgeCounts,
 } from "@/lib/db/queries";
+import { listLiveSponsors } from "@/lib/db/sponsors";
 import { getProfile } from "@/lib/network";
 import { canEdit } from "@/lib/session";
 import { canManage } from "@/lib/auth/session";
 import { routes } from "@/lib/routes";
 import { stackShareText } from "@/lib/share";
+import { dateOnly, pickSponsor, toCardData } from "@/lib/sponsors";
 import type { Company, DetectedTool, RelationshipEdge } from "@/lib/types";
 import { absoluteUrl } from "@/lib/url";
 
@@ -95,6 +98,12 @@ export async function generateMetadata({
  * a relationship is "X says it uses Y"; imported identity is "sourced from
  * public information"; a detected tool is "spotted on their website · not yet
  * confirmed".
+ *
+ * A fourth thing can sit beside all of that: one sponsored card, labelled as
+ * such, in a side column on a wide screen and below the claim invitation on
+ * a narrow one — never above the proof, never above the claim. It is picked
+ * from the sponsors table and nothing else, so it cannot change a
+ * relationship, a count, or the order anything above appears in.
  */
 export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
   const { slug } = await params;
@@ -102,13 +111,14 @@ export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
   if (!company) notFound();
 
   const { outgoing, incoming, usedByCount } = await getProfile(company);
-  const [manages, legacyEditor, onNetwork] = await Promise.all([
+  const [manages, legacyEditor, onNetwork, liveSponsors] = await Promise.all([
     // Real ownership: a row in company_members, which survives a new device.
     canManage(company.id),
     // The edit-token cookie this predates. Kept so a claim made before
     // accounts existed still works from that browser.
     canEdit(company.id),
     countIncomingOnNetwork(company.id),
+    listLiveSponsors(dateOnly()),
   ]);
   const mine = manages || legacyEditor;
 
@@ -116,208 +126,252 @@ export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
   const connections = incoming.length + outgoing.length;
   const about = aboutBeyondTagline(company.about, company.description);
   const spotted = claimed ? [] : (company.detectedStack ?? []);
+  const sponsor = pickSponsor(liveSponsors, {
+    category: company.category,
+    pageKey: company.slug,
+  });
 
   return (
     <main className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-16">
-      {/* 1 — identity */}
-      <header className="flex flex-col gap-5 sm:flex-row sm:items-start sm:gap-6">
-        <CompanyLogo name={company.name} logoUrl={company.logoUrl} size="xl" />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <h1 className="text-[clamp(1.875rem,5vw,3rem)] font-medium leading-[1.05] tracking-[-0.035em]">
-              {company.name}
-            </h1>
-            {/* Credible, not loud: a claimed profile earns one tick. */}
-            {claimed ? (
-              <span className="mono shrink-0 text-accent-ink">✓ Claimed</span>
-            ) : (
-              <span className="mono shrink-0 text-ink-3">Unclaimed</span>
-            )}
-          </div>
-
-          {company.description && (
-            <p className="mt-3 max-w-xl text-lg leading-relaxed text-ink-2">
-              {company.description}
-            </p>
-          )}
-
-          <div className="mono mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-ink-3">
-            {company.category && <span>{company.category}</span>}
-            {company.audience && (
-              <span>
-                Built for <span className="text-ink-2">{company.audience}</span>
-              </span>
-            )}
-            {company.builtBy && (
-              <span>
-                Built by <span className="text-ink-2">{company.builtBy}</span>
-              </span>
-            )}
-            <span>Updated {timeAgo(company.updatedAt)}</span>
-            {connections > 0 && (
-              <span>
-                <span className="text-ink-2">{padCount(connections)}</span>{" "}
-                {connections === 1 ? "connection" : "connections"}
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="flex shrink-0 flex-wrap gap-2">
-          {manages ? (
-            <Link
-              href={routes.manage(company.slug)}
-              className="btn btn-secondary !py-2 !text-sm"
-            >
-              Manage
-            </Link>
-          ) : (
-            legacyEditor && (
-              <Link
-                href={`/stack/${company.slug}`}
-                className="btn btn-secondary !py-2 !text-sm"
-              >
-                Edit my stack
-              </Link>
-            )
-          )}
-          <a
-            href={company.website}
-            target="_blank"
-            rel="noreferrer nofollow"
-            className="btn btn-primary !py-2 !text-sm"
-          >
-            Visit website ↗
-          </a>
-        </div>
-      </header>
-
       {/*
-       * Their own account of themselves, in their own words. Two sources only:
-       * the description they wrote on purpose, and their own /about page. Not
-       * our prose, and not their homepage — homepages are where testimonials
-       * live, and a customer's sentence presented as the vendor's is the one
-       * misattribution this product cannot make.
+       * With a sponsor, a two-column grid on wide screens: the profile in the
+       * first column, the card in a narrow second one, sticky. Without one the
+       * page is exactly what it was — no reserved column, no empty box.
        */}
-      {(about || company.whatItDoes.length > 0) && (
-        <section className="mt-12 grid gap-10 border-t border-line pt-8 md:grid-cols-[1.6fr_1fr] md:gap-14">
-          {about && (
-            <div>
+      <div
+        className={
+          sponsor ? "grid gap-x-12 lg:grid-cols-[minmax(0,1fr)_15rem]" : ""
+        }
+      >
+        <div className="min-w-0">
+          {/* 1 — identity */}
+          <header className="flex flex-col gap-5 sm:flex-row sm:items-start sm:gap-6">
+            <CompanyLogo name={company.name} logoUrl={company.logoUrl} size="xl" />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <h1 className="text-[clamp(1.875rem,5vw,3rem)] font-medium leading-[1.05] tracking-[-0.035em]">
+                  {company.name}
+                </h1>
+                {/* Credible, not loud: a claimed profile earns one tick. */}
+                {claimed ? (
+                  <span className="mono shrink-0 text-accent-ink">✓ Claimed</span>
+                ) : (
+                  <span className="mono shrink-0 text-ink-3">Unclaimed</span>
+                )}
+              </div>
+
+              {company.description && (
+                <p className="mt-3 max-w-xl text-lg leading-relaxed text-ink-2">
+                  {company.description}
+                </p>
+              )}
+
+              <div className="mono mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-ink-3">
+                {company.category && <span>{company.category}</span>}
+                {company.audience && (
+                  <span>
+                    Built for <span className="text-ink-2">{company.audience}</span>
+                  </span>
+                )}
+                {company.builtBy && (
+                  <span>
+                    Built by <span className="text-ink-2">{company.builtBy}</span>
+                  </span>
+                )}
+                <span>Updated {timeAgo(company.updatedAt)}</span>
+                {connections > 0 && (
+                  <span>
+                    <span className="text-ink-2">{padCount(connections)}</span>{" "}
+                    {connections === 1 ? "connection" : "connections"}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex shrink-0 flex-wrap gap-2">
+              {manages ? (
+                <Link
+                  href={routes.manage(company.slug)}
+                  className="btn btn-secondary !py-2 !text-sm"
+                >
+                  Manage
+                </Link>
+              ) : (
+                legacyEditor && (
+                  <Link
+                    href={`/stack/${company.slug}`}
+                    className="btn btn-secondary !py-2 !text-sm"
+                  >
+                    Edit my stack
+                  </Link>
+                )
+              )}
+              <a
+                href={company.website}
+                target="_blank"
+                rel="noreferrer nofollow"
+                className="btn btn-primary !py-2 !text-sm"
+              >
+                Visit website ↗
+              </a>
+            </div>
+          </header>
+
+          {/*
+           * Their own account of themselves, in their own words. Two sources only:
+           * the description they wrote on purpose, and their own /about page. Not
+           * our prose, and not their homepage — homepages are where testimonials
+           * live, and a customer's sentence presented as the vendor's is the one
+           * misattribution this product cannot make.
+           */}
+          {(about || company.whatItDoes.length > 0) && (
+            <section className="mt-12 grid gap-10 border-t border-line pt-8 md:grid-cols-[1.6fr_1fr] md:gap-14">
+              {about && (
+                <div>
+                  <SectionHead
+                    title="About"
+                    aside={
+                      <span className="mono text-ink-3">
+                        From {company.domain}
+                      </span>
+                    }
+                  />
+                  <p className="max-w-prose leading-relaxed text-ink-2">{about}</p>
+                </div>
+              )}
+
+              {company.whatItDoes.length > 0 && (
+                <div>
+                  <SectionHead title="What it does" />
+                  <ul className="space-y-2 text-ink-2">
+                    {company.whatItDoes.map((item) => (
+                      <li key={item} className="flex gap-2.5 leading-relaxed">
+                        <span aria-hidden className="mono shrink-0 text-ink-3">
+                          ·
+                        </span>
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mono mt-3 text-ink-3">
+                    Their own feature list, {company.domain}
+                  </p>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* 2 — the proof, and the strongest thing on the page */}
+          <UsedBy
+            company={company}
+            incoming={incoming}
+            usedByCount={usedByCount}
+            onNetwork={onNetwork}
+            mine={mine}
+          />
+
+          {/* 3 — what powers it, or what we merely suspect powers it */}
+          {outgoing.length > 0 ? (
+            <section className="mt-14">
               <SectionHead
-                title="About"
+                title={`${company.name} uses ${outgoing.length} ${outgoing.length === 1 ? "tool" : "tools"}`}
                 aside={
                   <span className="mono text-ink-3">
-                    From {company.domain}
+                    {company.name}&apos;s own words
                   </span>
                 }
               />
-              <p className="max-w-prose leading-relaxed text-ink-2">{about}</p>
-            </div>
-          )}
-
-          {company.whatItDoes.length > 0 && (
-            <div>
-              <SectionHead title="What it does" />
-              <ul className="space-y-2 text-ink-2">
-                {company.whatItDoes.map((item) => (
-                  <li key={item} className="flex gap-2.5 leading-relaxed">
-                    <span aria-hidden className="mono shrink-0 text-ink-3">
-                      ·
-                    </span>
-                    <span>{item}</span>
-                  </li>
+              <div className="border-t border-line">
+                {outgoing.map((edge) => (
+                  <CompanyInline
+                    key={edge.id}
+                    company={edge.target}
+                    note={
+                      edge.target.networkEligible
+                        ? edge.target.domain
+                        : `${edge.target.domain} · large tool`
+                    }
+                  />
                 ))}
-              </ul>
-              <p className="mono mt-3 text-ink-3">
-                Their own feature list, {company.domain}
-              </p>
-            </div>
+              </div>
+            </section>
+          ) : spotted.length > 0 ? (
+            <SpottedOnSite
+              name={company.name}
+              domain={company.domain}
+              slug={company.slug}
+              tools={spotted}
+            />
+          ) : (
+            <p className="mono mt-14 text-ink-3">
+              {company.name} hasn’t named its own tools yet.
+            </p>
           )}
-        </section>
-      )}
 
-      {/* 2 — the proof, and the strongest thing on the page */}
-      <UsedBy
-        company={company}
-        incoming={incoming}
-        usedByCount={usedByCount}
-        onNetwork={onNetwork}
-        mine={mine}
-      />
+          {/* 4 — why claim it, for a profile nobody there has claimed */}
+          {!claimed && !mine && <ClaimInvite company={company} />}
+        </div>
 
-      {/* 3 — what powers it, or what we merely suspect powers it */}
-      {outgoing.length > 0 ? (
-        <section className="mt-14">
-          <SectionHead
-            title={`${company.name} uses ${outgoing.length} ${outgoing.length === 1 ? "tool" : "tools"}`}
-            aside={
-              <span className="mono text-ink-3">
-                {company.name}&apos;s own words
-              </span>
-            }
-          />
-          <div className="border-t border-line">
-            {outgoing.map((edge) => (
-              <CompanyInline
-                key={edge.id}
-                company={edge.target}
-                note={
-                  edge.target.networkEligible
-                    ? edge.target.domain
-                    : `${edge.target.domain} · large tool`
-                }
-              />
-            ))}
-          </div>
-        </section>
-      ) : spotted.length > 0 ? (
-        <SpottedOnSite
-          name={company.name}
-          domain={company.domain}
-          slug={company.slug}
-          tools={spotted}
-        />
-      ) : (
-        <p className="mono mt-14 text-ink-3">
-          {company.name} hasn’t named its own tools yet.
-        </p>
-      )}
-
-      {/* 4 — why claim it, for a profile nobody there has claimed */}
-      {!claimed && !mine && <ClaimInvite company={company} />}
-
-      {/* 5 — the graph, once there is something to draw */}
-      <LocalGraph company={company} incoming={incoming} outgoing={outgoing} />
-
-      {/* 6 — provenance, stated plainly and without a wall of legal copy */}
-      <footer className="mt-16 border-t border-line pt-7">
-        <div className="flex flex-wrap items-end justify-between gap-6">
-          <div>
-            <p className="label">Share this stack</p>
-            <ShareRow
-              url={absoluteUrl(`/share/${company.slug}`)}
-              text={stackShareText(company, outgoing)}
-              onShare={trackShare.bind(null, company.slug)}
+        {/*
+         * The sponsored card. In DOM order it follows the claim invitation, which
+         * is where a phone shows it; the grid placement moves it beside the
+         * profile on a wide screen. One element, so one impression.
+         */}
+        {sponsor && (
+          <div className="mt-12 lg:sticky lg:top-8 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0 lg:self-start">
+            <SponsorCard
+              sponsor={toCardData(sponsor)}
+              page={routes.profile(company.slug)}
             />
           </div>
-          <div className="mono max-w-sm space-y-1.5 text-ink-3">
-            <p>
-              Every relationship here reads “X says it uses {company.name}” —
-              one company’s statement about its own stack, never a
-              verified-customer claim.
-            </p>
-            {!claimed && (
-              <p>
-                Company information sourced from public information
-                {company.detectedFrom === "website"
-                  ? ` (${company.domain})`
-                  : ""}
-                .
-              </p>
-            )}
-          </div>
+        )}
+
+        <div className="min-w-0 lg:col-start-1">
+          {/* 5 — the graph, once there is something to draw */}
+          <LocalGraph company={company} incoming={incoming} outgoing={outgoing} />
+
+          {/* 6 — provenance, stated plainly and without a wall of legal copy */}
+          <footer className="mt-16 border-t border-line pt-7">
+            <div className="flex flex-wrap items-end justify-between gap-6">
+              <div>
+                <p className="label">Share this stack</p>
+                <ShareRow
+                  url={absoluteUrl(`/share/${company.slug}`)}
+                  text={stackShareText(company, outgoing)}
+                  onShare={trackShare.bind(null, company.slug)}
+                />
+              </div>
+              <div className="mono max-w-sm space-y-1.5 text-ink-3">
+                <p>
+                  Every relationship here reads “X says it uses {company.name}” —
+                  one company’s statement about its own stack, never a
+                  verified-customer claim.
+                </p>
+                {!claimed && (
+                  <p>
+                    Company information sourced from public information
+                    {company.detectedFrom === "website"
+                      ? ` (${company.domain})`
+                      : ""}
+                    .
+                  </p>
+                )}
+                {/* No sponsor on this page: the quiet pointer instead of an empty box. */}
+                {!sponsor && (
+                  <p>
+                    <Link
+                      href={routes.advertise()}
+                      className="hover:text-accent-ink"
+                    >
+                      {brand.advertiseCta}
+                    </Link>
+                  </p>
+                )}
+              </div>
+            </div>
+          </footer>
         </div>
-      </footer>
+      </div>
     </main>
   );
 }

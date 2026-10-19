@@ -87,6 +87,18 @@ export const brand = {
   footerLine: "The independent software graph.",
   footerAside:
     "The enemy was never enterprise software. It's a discovery model that makes independent products invisible.",
+
+  /* --- sponsorship ------------------------------------------------------ */
+  /*
+   * A sponsor buys a labelled card and nothing else. The manifesto's "no
+   * pay-to-play rankings" still holds, because a card is not a ranking: it
+   * sits beside the graph, says what it is, and touches no relationship,
+   * claim or ordering. The page that sells it says the same thing in the
+   * same words.
+   */
+  sponsoredLabel: "Sponsored",
+  advertiseCta: "Advertise on Who Uses What",
+  contactEmail: "hello@whouseswhat.tech",
 } as const;
 
 export const CATEGORIES = [
