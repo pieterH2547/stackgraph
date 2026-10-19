@@ -296,28 +296,54 @@ function rotationIndex(seed: string, modulo: number): number {
   return hash % modulo;
 }
 
+/** How many sponsored cards one page shows at most. */
+export const SPONSOR_SLOTS_PER_PAGE = 3;
+
+type Pickable = Pick<Sponsor, "active" | "startsOn" | "endsOn" | "categories">;
+
+/** `items` rotated so that a page-dependent element comes first. */
+function rotated<T>(items: T[], seed: string): T[] {
+  if (items.length <= 1) return items;
+  const start = rotationIndex(seed, items.length);
+  return [...items.slice(start), ...items.slice(0, start)];
+}
+
 /**
- * Which live sponsor a profile shows.
+ * Which live sponsors a profile shows, in order, at most `limit` of them.
  *
- * A sponsor that named this page's category beats one that runs everywhere,
- * because that is what the narrower package is for. Among equals the choice
- * rotates by the page, so two sponsors sharing a window each get roughly half
- * the profiles rather than one of them getting all of them.
+ * Sponsors that named this page's category come before those that run
+ * everywhere, because that is what the narrower package is for. Within each
+ * group the order rotates by page, so sponsors sharing a window take turns at
+ * the top across profiles instead of one of them always leading.
  *
  * This is the only ordering decision sponsorship ever makes, and it orders
  * sponsors — never companies.
  */
-export function pickSponsor<T extends Pick<Sponsor, "active" | "startsOn" | "endsOn" | "categories">>(
+export function pickSponsors<T extends Pickable>(
   sponsors: T[],
-  context: { category: string | null; pageKey: string; today?: string },
-): T | null {
+  context: {
+    category: string | null;
+    pageKey: string;
+    today?: string;
+    limit?: number;
+  },
+): T[] {
   const today = context.today ?? dateOnly();
   const live = sponsors.filter(
     (s) => isLive(s, today) && targets(s, context.category),
   );
-  if (live.length === 0) return null;
-
   const targeted = live.filter((s) => s.categories !== null);
-  const pool = targeted.length > 0 ? targeted : live;
-  return pool[rotationIndex(context.pageKey, pool.length)];
+  const everywhere = live.filter((s) => s.categories === null);
+  return [
+    ...rotated(targeted, context.pageKey),
+    ...rotated(everywhere, context.pageKey),
+  ].slice(0, context.limit ?? SPONSOR_SLOTS_PER_PAGE);
+}
+
+/** The single sponsor a page would lead with, or null. */
+export function pickSponsor<T extends Pickable>(
+  sponsors: T[],
+  context: { category: string | null; pageKey: string; today?: string },
+): T | null {
+  return pickSponsors(sponsors, { ...context, limit: 1 })[0] ?? null;
 }

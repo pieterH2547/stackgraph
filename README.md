@@ -144,7 +144,7 @@ build a schema in a local file instead.
 
 ```bash
 npm run verify           # typecheck + lint + tests + production build
-npm test                 # 180 tests, no network, no mail provider
+npm test                 # 181 tests, no network, no mail provider
 ```
 
 ### Environment
@@ -189,7 +189,7 @@ only affect that one path on the host.
 
 | Route | What happens |
 | --- | --- |
-| `/` | Hero, the global graph, recently connected, the manifesto, growing networks |
+| `/` | The global graph, then the hero search, recently connected, growing networks, the manifesto |
 | `/add` | One field: your website. Called *Claim your company*, because half the companies people look for already have a profile waiting — paste a domain that exists and you land on its claim page. |
 | `/add/confirm` | "We found this" — name, one line, for whom, built by, category |
 | `/stack/[slug]` | **The unlock page.** One task: *Add 2 tools you genuinely use*, with one-click suggestions read from your own site. Every tool you pick states its own consequence — "Tally gets: Used by Acme" — because that consequence is the product. |
@@ -277,18 +277,26 @@ same handful of names would sit on top of it forever.
 
 ## Sponsorship
 
-One paid placement exists: a compact card beside a company profile, labelled
-**Sponsored**, with a logo, a name, one line of at most 120 characters and a
-link carrying `rel="sponsored noopener noreferrer"`. On a wide screen it sits
-in a narrow column to the right of the profile; on a phone it follows the
-claim invitation, so it is never above the proof or above the claim. A page
-with no live sponsor shows no empty box, only a quiet *Advertise on Who Uses
-What* line in the footer.
+One paid placement exists: a panel labelled **Sponsored** beside a company
+profile, holding up to three sponsor cards and one dashed *Advertise here*
+slot. The layout follows Launch Llama's sidebar, in this site's own colours
+and with its own label. Each card is a logo, a name and one line of at most
+120 characters, and the whole card is a link carrying
+`rel="sponsored noopener noreferrer"`. On a wide screen the panel sits in a
+sticky column to the right of the profile, and the profile widens to the
+header's width to make room; on a phone it follows the claim invitation, so
+it is never above the proof or above the claim. A page with no live sponsor
+shows no panel and no empty box, only a quiet *Advertise on Who Uses What*
+line in the footer.
 
-What a sponsor buys is the card. What it cannot buy is structural: the
+Sponsors that named the page's category come first, then those that run
+everywhere; within each group the order rotates by page, so sponsors sharing
+a window take turns at the top.
+
+What a sponsor buys is a card. What it cannot buy is structural: the
 `sponsors` table has no foreign key into `companies` or `relationships`, the
 sponsor modules contain no query into either, and the one ordering decision
-sponsorship makes — which sponsor a page shows — orders sponsors, never
+sponsorship makes — which sponsors a page shows — orders sponsors, never
 companies. A test holds both of those. "No pay-to-play rankings" in the
 manifesto still means what it says.
 
@@ -329,7 +337,7 @@ further ones are dropped rather than stored. All of it lives in two tables
 src/
   app/                     routes (App Router, every data page dynamic)
   actions/                 server actions: company, stack, claim, admin, sponsors
-  components/              UI, incl. StackEditor, LocalGraph, GlobalGraph, SponsorCard
+  components/              UI, incl. StackEditor, LocalGraph, GlobalGraph, SponsorPanel
   lib/
     db/schema.ts           the whole data model
     db/client.ts           one libSQL client, lazy schema
@@ -346,7 +354,7 @@ src/
     notify.ts              recognition emails, dedupe and cooldown
     metrics.ts             the four-factor K and cycle time
     graph.ts               deterministic graph geometry
-  test/                    180 tests over the whole loop, and the sponsor wall
+  test/                    181 tests over the whole loop, and the sponsor wall
 scripts/                   db:push, db:seed, db:reset, db:inspect,
                            launchllama:score, launchllama:import
 ```
@@ -384,7 +392,7 @@ DMs, jobs, community feed, affiliate links, mobile app, browser extension,
 integration marketplace or SEO content engine. No vendor dashboard. No ad
 network.
 
-The one monetisation surface is the labelled sponsored card above, built so
+The one monetisation surface is the labelled sponsored panel above, built so
 that the question of whether to sell it can be answered with a report rather
 than a guess. Everything it must never touch — relationships, claims,
 orderings — is held by a test, not by a promise.

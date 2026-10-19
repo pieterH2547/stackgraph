@@ -19,9 +19,11 @@ import {
 export const dynamic = "force-dynamic";
 
 /**
- * The page answers one question and then proves it can.
+ * The page shows the network first and then hands you the question.
  *
- * Hero: the question, and a field to ask it with. Everything below is the
+ * The graph opens the page: the picture of who uses what is the clearest
+ * statement of what this is, before a word of copy. Directly under it, the
+ * question and a field to ask it with. Everything below that is the
  * demonstration — real edges, real counts, no placeholders. A section with
  * nothing in it is not rendered rather than rendered empty, because an empty
  * "Explore connections" box says the opposite of what the section is for.
@@ -35,12 +37,26 @@ export default async function HomePage() {
     buildGlobalGraph(70),
   ]);
 
+  const hasGraph = graph.nodes.length > 0;
+
   return (
     <main>
+      {/* 0 — the network itself, before anything is said about it */}
+      {hasGraph && (
+        <Section
+          title={brand.graphHeading}
+          aside={<span className="mono text-ink-3">{brand.graphSubline}</span>}
+          className="pt-10 sm:pt-14"
+        >
+          <GlobalGraph graph={graph} />
+        </Section>
+      )}
+
       <Hero
         companies={stats.companies}
         relationships={stats.relationships}
         claimed={stats.claimed}
+        first={!hasGraph}
       />
 
       {/* 1 — the network is moving, and here is it moving */}
@@ -109,14 +125,6 @@ export default async function HomePage() {
         </Section>
       )}
 
-      {graph.nodes.length > 0 && (
-        <Section title={brand.graphHeading} aside={
-          <span className="mono text-ink-3">{brand.graphSubline}</span>
-        }>
-          <GlobalGraph graph={graph} />
-        </Section>
-      )}
-
       <Manifesto />
 
       <section className="mx-auto max-w-6xl px-5 pb-4 sm:px-8">
@@ -145,13 +153,20 @@ function Hero({
   companies,
   relationships,
   claimed,
+  first,
 }: {
   companies: number;
   relationships: number;
   claimed: number;
+  /** True when nothing sits above it, so it needs the page's top spacing. */
+  first: boolean;
 }) {
   return (
-    <section className="mx-auto max-w-6xl px-5 pb-14 pt-14 sm:px-8 sm:pb-16 sm:pt-20">
+    <section
+      className={`mx-auto max-w-6xl px-5 pb-14 sm:px-8 sm:pb-16 ${
+        first ? "pt-14 sm:pt-20" : "pt-6 sm:pt-8"
+      }`}
+    >
       <p className="label">{brand.wordmark}</p>
       <h1 className="mt-3 max-w-4xl text-[clamp(2.5rem,7.5vw,5.25rem)] font-medium leading-[0.95] tracking-[-0.04em]">
         {brand.heroHeadline}
@@ -279,13 +294,15 @@ function Section({
   title,
   aside,
   children,
+  className = "",
 }: {
   title: string;
   aside?: React.ReactNode;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <section className="mx-auto max-w-6xl px-5 pb-12 sm:px-8">
+    <section className={`mx-auto max-w-6xl px-5 pb-12 sm:px-8 ${className}`}>
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line pb-2.5">
         <h2 className="text-xl font-medium tracking-tight">{title}</h2>
         {aside}

@@ -6,7 +6,7 @@ import { CompanyInline } from "@/components/CompanyCard";
 import { LocalGraph } from "@/components/LocalGraph";
 import { RelationshipJudge } from "@/components/RelationshipJudge";
 import { ShareRow } from "@/components/ShareRow";
-import { SponsorCard } from "@/components/SponsorCard";
+import { SponsorPanel } from "@/components/SponsorCard";
 import { disputeRelationship, trackShare } from "@/actions/stack";
 import { brand } from "@/lib/brand";
 import { companiesCount, companiesSay, padCount, timeAgo } from "@/lib/format";
@@ -21,7 +21,7 @@ import { canEdit } from "@/lib/session";
 import { canManage } from "@/lib/auth/session";
 import { routes } from "@/lib/routes";
 import { stackShareText } from "@/lib/share";
-import { dateOnly, pickSponsor, toCardData } from "@/lib/sponsors";
+import { dateOnly, pickSponsors, toCardData } from "@/lib/sponsors";
 import type { Company, DetectedTool, RelationshipEdge } from "@/lib/types";
 import { absoluteUrl } from "@/lib/url";
 
@@ -99,11 +99,11 @@ export async function generateMetadata({
  * public information"; a detected tool is "spotted on their website · not yet
  * confirmed".
  *
- * A fourth thing can sit beside all of that: one sponsored card, labelled as
- * such, in a side column on a wide screen and below the claim invitation on
- * a narrow one — never above the proof, never above the claim. It is picked
- * from the sponsors table and nothing else, so it cannot change a
- * relationship, a count, or the order anything above appears in.
+ * A fourth thing can sit beside all of that: a short sponsored panel,
+ * labelled as such, in a side column on a wide screen and below the claim
+ * invitation on a narrow one — never above the proof, never above the claim.
+ * It is picked from the sponsors table and nothing else, so it cannot change
+ * a relationship, a count, or the order anything above appears in.
  */
 export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
   const { slug } = await params;
@@ -126,21 +126,28 @@ export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
   const connections = incoming.length + outgoing.length;
   const about = aboutBeyondTagline(company.about, company.description);
   const spotted = claimed ? [] : (company.detectedStack ?? []);
-  const sponsor = pickSponsor(liveSponsors, {
+  const sponsors = pickSponsors(liveSponsors, {
     category: company.category,
     pageKey: company.slug,
   });
+  const sponsor = sponsors.length > 0;
 
   return (
-    <main className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-16">
+    <main
+      className={`mx-auto px-5 py-12 sm:px-8 sm:py-16 ${
+        sponsor ? "max-w-6xl" : "max-w-5xl"
+      }`}
+    >
       {/*
-       * With a sponsor, a two-column grid on wide screens: the profile in the
-       * first column, the card in a narrow second one, sticky. Without one the
-       * page is exactly what it was — no reserved column, no empty box.
+       * With sponsors, a two-column grid on wide screens: the profile in the
+       * first column, the sponsored panel in a narrow second one, sticky, and
+       * the page as wide as the header so the column lines up with its right
+       * edge. Without sponsors the page is exactly what it was — no reserved
+       * column, no empty box.
        */}
       <div
         className={
-          sponsor ? "grid gap-x-12 lg:grid-cols-[minmax(0,1fr)_15rem]" : ""
+          sponsor ? "grid gap-x-12 lg:grid-cols-[minmax(0,1fr)_18rem]" : ""
         }
       >
         <div className="min-w-0">
@@ -313,14 +320,15 @@ export default async function CompanyPage({ params }: PageProps<"/c/[slug]">) {
         </div>
 
         {/*
-         * The sponsored card. In DOM order it follows the claim invitation, which
-         * is where a phone shows it; the grid placement moves it beside the
-         * profile on a wide screen. One element, so one impression.
+         * The sponsored panel. In DOM order it follows the claim invitation,
+         * which is where a phone shows it; the grid placement moves it beside
+         * the profile on a wide screen. One element per sponsor, so one
+         * impression each.
          */}
         {sponsor && (
           <div className="mt-12 lg:sticky lg:top-8 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0 lg:self-start">
-            <SponsorCard
-              sponsor={toCardData(sponsor)}
+            <SponsorPanel
+              sponsors={sponsors.map(toCardData)}
               page={routes.profile(company.slug)}
             />
           </div>
