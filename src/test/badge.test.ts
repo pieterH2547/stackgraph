@@ -385,6 +385,17 @@ describe("measurement", () => {
     );
   });
 
+  it("leaves with the company when admin removes it", async () => {
+    const vendor = await creditedVendor(1);
+    await recordBadgeView(vendor.id);
+    await recordBadgeClick(vendor.id);
+    expect(await countRows("badge_stats")).toBe(1);
+
+    const { deleteCompany } = await import("@/lib/db/queries");
+    await deleteCompany(vendor.id);
+    expect(await countRows("badge_stats")).toBe(0);
+  });
+
   it("reports a window, not all time", async () => {
     const vendor = await creditedVendor(1);
     const now = new Date("2026-10-18T12:00:00Z");

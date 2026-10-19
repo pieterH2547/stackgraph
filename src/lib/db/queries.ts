@@ -596,6 +596,7 @@ export async function deleteCompany(
     `DELETE FROM relationships WHERE source_company_id = ?1 OR target_company_id = ?1`,
     `DELETE FROM claims WHERE company_id = ?1`,
     `DELETE FROM notifications WHERE company_id = ?1`,
+    `DELETE FROM badge_stats WHERE company_id = ?1`,
     `DELETE FROM company_members WHERE company_id = ?1`,
     `UPDATE login_tokens SET intent_company_id = NULL, claim_draft = NULL WHERE intent_company_id = ?1`,
     `DELETE FROM events WHERE company_id = ?1 OR target_company_id = ?1`,
