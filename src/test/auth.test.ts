@@ -85,6 +85,48 @@ describe("settling ownership", () => {
     expect(outcome).toEqual({ status: "APPROVED", reason: "DOMAIN_MATCH" });
 
     expect(await getMembership(user.id, acme.id)).not.toBeNull();
+    // Identity is proved; the claim is the gate's to give, and it wants two
+    // independent tools first.
+    const after = (await getCompanyByDomain("acme.dev"))!;
+    expect(after.claimVerifiedAt).not.toBeNull();
+    expect(after.contactEmail).toBe("sam@acme.dev");
+    expect(after.status).toBe("UNCLAIMED");
+  });
+
+  it("turns CLAIMED once the manager names two independent tools", async () => {
+    const acme = await company("acme.dev", "Acme");
+    const user = await upsertUser({ email: "sam@acme.dev", provider: "google" });
+    await settleOwnership({ user, companyId: acme.id });
+
+    const { submitStack } = await import("@/lib/network");
+    const one = await submitStack({
+      companyId: acme.id,
+      tools: [{ website: "tally.so", name: "Tally" }],
+    });
+    expect(one.company.status).toBe("UNCLAIMED");
+
+    const two = await submitStack({
+      companyId: acme.id,
+      tools: [{ website: "plausible.io", name: "Plausible" }],
+    });
+    expect(two.company.status).toBe("CLAIMED");
+  });
+
+  it("claims on the spot when the company already credits two tools", async () => {
+    const acme = await company("acme.dev", "Acme");
+    const { submitStack } = await import("@/lib/network");
+    await submitStack({
+      companyId: acme.id,
+      tools: [
+        { website: "tally.so", name: "Tally" },
+        { website: "plausible.io", name: "Plausible" },
+      ],
+    });
+    // Two credits, but nobody proved anything yet: still unclaimed.
+    expect((await getCompanyByDomain("acme.dev"))!.status).toBe("UNCLAIMED");
+
+    const user = await upsertUser({ email: "sam@acme.dev", provider: "email" });
+    await settleOwnership({ user, companyId: acme.id });
     expect((await getCompanyByDomain("acme.dev"))!.status).toBe("CLAIMED");
   });
 

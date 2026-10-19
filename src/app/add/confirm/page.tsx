@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ConfirmCompanyForm } from "@/components/ConfirmCompanyForm";
-import { confirmCompany } from "@/actions/company";
+import { requestAddLink, startGoogleAdd } from "@/actions/company";
+import { googleConfigured } from "@/lib/auth/google";
 import { detectSite } from "@/lib/detect";
 import { tryNormalizeSiteUrl } from "@/lib/url";
 
@@ -20,6 +21,12 @@ export default async function ConfirmPage({
   const raw = typeof params.url === "string" ? params.url : "";
   const normalized = tryNormalizeSiteUrl(raw);
   if (!normalized) redirect("/add");
+  const error =
+    params.error === "draft"
+      ? "Check the name and try again."
+      : params.error === "google-unavailable"
+        ? "Google sign-in isn't set up here. A link works."
+        : "";
 
   const detected = await detectSite(normalized.website);
 
@@ -35,8 +42,15 @@ export default async function ConfirmPage({
           : "Read from your own site. Correct anything that's off."}
       </p>
 
+      {error && (
+        <p className="mt-5 max-w-lg border-l-2 border-accent pl-3 text-sm text-accent-ink">
+          {error}
+        </p>
+      )}
+
       <ConfirmCompanyForm
-        action={confirmCompany}
+        action={requestAddLink}
+        googleAction={googleConfigured() ? startGoogleAdd : undefined}
         detected={{
           website: detected.website,
           domain: detected.domain,

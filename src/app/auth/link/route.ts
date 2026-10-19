@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { routes } from "@/lib/routes";
+import { addDestination, parseAddDraft, settleAdd } from "@/lib/auth/add";
 import { settleOwnership } from "@/lib/auth/claim";
 import { applyClaimDraft, parseDraft } from "@/lib/auth/draft";
 import { startSession } from "@/lib/auth/session";
@@ -31,6 +32,14 @@ export async function GET(request: Request) {
   await startSession(user.id);
 
   if (!spent.intentCompanyId) {
+    // "Claim your company" for a domain that was not on the graph yet: the
+    // profile is created now, and only now, from the draft on the token.
+    const add = parseAddDraft(spent.claimDraft);
+    if (add) {
+      return NextResponse.redirect(
+        new URL(addDestination(await settleAdd({ user, draft: add }), add.domain), url),
+      );
+    }
     return NextResponse.redirect(new URL(routes.dashboard(), url));
   }
 
@@ -54,3 +63,4 @@ export async function GET(request: Request) {
     ),
   );
 }
+

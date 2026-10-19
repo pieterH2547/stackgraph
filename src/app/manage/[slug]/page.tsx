@@ -42,6 +42,7 @@ export default async function ManagePage({ params }: PageProps<"/manage/[slug]">
   const role = await roleFor(company.id, user);
   if (!role) redirect(`${routes.profile(slug)}?claim=refused&why=ALREADY_CLAIMED`);
 
+  const claimed = company.status === "CLAIMED";
   const [outgoing, incoming, progress] = await Promise.all([
     listOutgoingEdges(company.id),
     listIncomingEdges(company.id),
@@ -72,6 +73,21 @@ export default async function ManagePage({ params }: PageProps<"/manage/[slug]">
           View public profile
         </Link>
       </div>
+
+      {/*
+       * Proving the address made this person the manager; the claim itself
+       * is two independent tools, and until then the profile says Unclaimed.
+       */}
+      {!claimed && (
+        <p className="mt-8 max-w-xl border-l-2 border-accent pl-4 leading-relaxed">
+          One step left: name {REQUIRED_UPSTREAM} independent tools{" "}
+          {company.name} uses, and the profile is claimed.{" "}
+          <a href="#stack" className="link-sharp">
+            Add them below
+          </a>
+          .
+        </p>
+      )}
 
       {/* Who uses you: the reason to be here, so it is first. */}
       <section className="mt-12">
@@ -126,11 +142,13 @@ export default async function ManagePage({ params }: PageProps<"/manage/[slug]">
       </section>
 
       {/* Your stack. */}
-      <section className="mt-14">
+      <section id="stack" className="mt-14">
         <h2 className="text-xl font-medium tracking-tight">{brand.poweredBy}</h2>
         <p className="mt-2 max-w-lg leading-relaxed text-ink-2">
           {progress.upstream}/{REQUIRED_UPSTREAM} independent tools credited.
           Each one puts {company.name} in that tool’s {brand.usedBy}.
+          {!claimed &&
+            ` ${company.name} is claimed once it names ${REQUIRED_UPSTREAM}.`}
         </p>
 
         {outgoing.length > 0 && (
@@ -160,6 +178,7 @@ export default async function ManagePage({ params }: PageProps<"/manage/[slug]">
           companyName={company.name}
           companyDomain={company.domain}
           existingCredits={progress.upstream}
+          requiredCredits={claimed ? 0 : REQUIRED_UPSTREAM}
         />
       </section>
 
