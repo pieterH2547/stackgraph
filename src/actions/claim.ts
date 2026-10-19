@@ -16,7 +16,13 @@ import {
   getCompanyBySlug,
   recordClaimIdentity,
 } from "@/lib/db/queries";
-import { sendEmail, showsDevLinks } from "@/lib/email";
+import {
+  MAIL_FAILED_MESSAGE,
+  MAIL_UNAVAILABLE_MESSAGE,
+  mailUnavailable,
+  sendEmail,
+  showsDevLinks,
+} from "@/lib/email";
 import { track } from "@/lib/events";
 import { settleClaim } from "@/lib/network";
 import { settleOwnership } from "@/lib/auth/claim";
@@ -59,6 +65,8 @@ export async function startClaim(
   if (!represents) {
     return { error: `Confirm that you represent ${company.name}.` };
   }
+  // Same rule as the sign-in link: no deliverable mail, no token, no link.
+  if (mailUnavailable()) return { error: MAIL_UNAVAILABLE_MESSAGE };
 
   const domainMatch = claimDomainMatches(email, company.domain);
   const claim = await createClaim({
@@ -75,7 +83,7 @@ export async function startClaim(
   });
 
   const link = absoluteUrl(routes.claimVerify(company.slug, claim.token));
-  await sendEmail({
+  const result = await sendEmail({
     to: email,
     subject: `Claim ${company.name} on ${brand.name}`,
     text: [
@@ -89,6 +97,11 @@ export async function startClaim(
       `— ${brand.name}`,
     ].join("\n"),
   });
+
+  if (result.transport === "resend" && !result.delivered) {
+    console.error(`[whouseswhat] claim link not sent: ${result.error}`);
+    return { error: MAIL_FAILED_MESSAGE };
+  }
 
   return {
     sentTo: email,
