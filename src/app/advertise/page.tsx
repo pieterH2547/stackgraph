@@ -47,7 +47,7 @@ export default function AdvertisePage() {
           <h2 className="text-xl font-medium tracking-tight">What you get</h2>
           <ul className="mt-3 space-y-2 text-ink-2">
             {[
-              "One compact card beside company profiles: your logo, your name, one line, and a link to your site.",
+              "One compact card in the sponsored column beside company profiles: your logo, your name, one line, and a link to your site. The column holds at most three sponsors.",
               "Beside the content on a wide screen, below the profile on a phone. Never in front of the graph.",
               "Optionally limited to the categories your customers are in.",
               "A monthly report: impressions, clicks and click-through rate, with crawlers and repeats filtered out and the raw numbers next to them.",

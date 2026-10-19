@@ -18,8 +18,10 @@ import {
 import {
   SPONSOR_DESCRIPTION_MAX,
   SPONSOR_PACKAGES,
+  SPONSOR_SLOTS_PER_PAGE,
   SponsorValidationError,
   pickSponsor,
+  pickSponsors,
   sponsorStatus,
   toCardData,
   validateDestinationUrl,
@@ -205,6 +207,43 @@ describe("when a sponsor runs", () => {
     // Every sponsor gets some pages, and the same page gets the same sponsor.
     expect(new Set(chosen).size).toBe(3);
     expect(pickSponsor(sponsors, { category: null, pageKey: "company-7", today })?.id).toBe(chosen[7]);
+  });
+
+  it("fills the panel with targeted sponsors first, at most three, each once", () => {
+    const live = (id: string, categories: string[] | null) => ({
+      id,
+      active: true,
+      startsOn: null,
+      endsOn: null,
+      categories,
+    });
+    const sponsors = [
+      live("all-1", null),
+      live("all-2", null),
+      live("all-3", null),
+      live("analytics", ["Analytics"]),
+      live("design", ["Design"]),
+      { ...live("off", null), active: false },
+    ];
+
+    const panel = pickSponsors(sponsors, { category: "Analytics", pageKey: "acme", today });
+    expect(panel).toHaveLength(SPONSOR_SLOTS_PER_PAGE);
+    expect(panel[0].id).toBe("analytics");
+    expect(new Set(panel.map((s) => s.id)).size).toBe(panel.length);
+    expect(panel.map((s) => s.id)).not.toContain("design");
+    expect(panel.map((s) => s.id)).not.toContain("off");
+
+    // A page in no category gets only the run-everywhere sponsors.
+    const plain = pickSponsors(sponsors, { category: null, pageKey: "acme", today });
+    expect(plain.every((s) => s.categories === null)).toBe(true);
+
+    // Across pages, every run-everywhere sponsor gets to lead.
+    const leaders = new Set(
+      Array.from({ length: 60 }, (_, i) =>
+        pickSponsors(sponsors, { category: null, pageKey: `p-${i}`, today })[0].id,
+      ),
+    );
+    expect(leaders).toEqual(new Set(["all-1", "all-2", "all-3"]));
   });
 
   it("reads only live rows from the database", async () => {

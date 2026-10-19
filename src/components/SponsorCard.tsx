@@ -9,26 +9,63 @@ import type { SponsorCardData } from "@/lib/sponsors";
 import { withBasePath } from "@/lib/url";
 
 /**
- * The one thing a sponsor gets: a compact card, labelled as what it is.
+ * The sponsored column: a quiet panel, labelled as what it is, holding a
+ * short stack of sponsor cards and one dashed slot that says the space is
+ * for sale.
  *
  * Rendered on the server like everything else, so it takes no layout shift
- * and no extra request to appear. The only client work is the beacon — an
- * IntersectionObserver that fires once the card has been half on screen,
- * and a click handler — both native, both a few bytes, neither on the
- * critical path. No third-party script is loaded for it, ever.
+ * and no extra request to appear. The only client work is the beacons — an
+ * IntersectionObserver per card that fires once the card has been half on
+ * screen, and a click handler — both native, both a few bytes, neither on
+ * the critical path. No third-party script is loaded for it, ever.
  *
- * The link goes straight to the sponsor with `rel="sponsored"`: what the
+ * Each link goes straight to the sponsor with `rel="sponsored"`: what the
  * reader sees on hover is where they will land, and search engines are told
  * the link was paid for.
  */
-export function SponsorCard({
+export function SponsorPanel({
+  sponsors,
+  page,
+}: {
+  sponsors: SponsorCardData[];
+  page: string;
+}) {
+  if (sponsors.length === 0) return null;
+
+  return (
+    <aside
+      aria-label={brand.sponsoredLabel}
+      className="rounded-lg border border-line bg-line/35 p-3"
+    >
+      <p className="mono px-1 pb-2.5 pt-0.5 text-ink-3">{brand.sponsoredLabel}</p>
+      <ul className="space-y-2.5">
+        {sponsors.map((sponsor) => (
+          <li key={sponsor.id}>
+            <SponsorCard sponsor={sponsor} page={page} />
+          </li>
+        ))}
+        <li>
+          <Link
+            href={routes.advertise()}
+            className="mono flex min-h-16 items-center justify-center rounded-lg border border-dashed border-line-strong px-3 py-4 text-center text-ink-3 transition-colors hover:border-ink hover:text-ink"
+          >
+            Advertise here
+          </Link>
+        </li>
+      </ul>
+    </aside>
+  );
+}
+
+/** One sponsor. The whole card is the link. */
+function SponsorCard({
   sponsor,
   page,
 }: {
   sponsor: SponsorCardData;
   page: string;
 }) {
-  const ref = useRef<HTMLElement>(null);
+  const ref = useRef<HTMLAnchorElement>(null);
 
   useEffect(() => {
     const element = ref.current;
@@ -50,34 +87,27 @@ export function SponsorCard({
   }, [sponsor.id, page]);
 
   return (
-    <aside ref={ref} aria-label={brand.sponsoredLabel} className="card p-4">
-      <p className="mono text-ink-3">{brand.sponsoredLabel}</p>
-      <a
-        href={sponsor.destinationUrl}
-        target="_blank"
-        rel="sponsored noopener noreferrer"
-        onClick={() => beacon({ sponsorId: sponsor.id, kind: "click", page })}
-        className="group mt-3 flex items-start gap-3"
-      >
-        <CompanyLogo name={sponsor.name} logoUrl={sponsor.logoUrl} size="md" />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium tracking-tight group-hover:text-accent-ink">
-            {sponsor.name}
-          </span>
-          <span className="mt-0.5 block text-sm leading-snug text-ink-2">
-            {sponsor.description}
-          </span>
-          <span className="mono mt-2 block text-ink-3 group-hover:text-accent-ink">
-            Visit ↗
-          </span>
+    <a
+      ref={ref}
+      href={sponsor.destinationUrl}
+      target="_blank"
+      rel="sponsored noopener noreferrer"
+      onClick={() => beacon({ sponsorId: sponsor.id, kind: "click", page })}
+      className="card card-hover group block p-3.5"
+    >
+      <span className="flex items-center gap-2.5">
+        <CompanyLogo name={sponsor.name} logoUrl={sponsor.logoUrl} size="sm" />
+        <span className="min-w-0 flex-1 truncate font-medium tracking-tight group-hover:text-accent-ink">
+          {sponsor.name}
         </span>
-      </a>
-      <p className="mono mt-4 border-t border-line pt-3 text-ink-3">
-        <Link href={routes.advertise()} className="hover:text-accent-ink">
-          Advertise here
-        </Link>
-      </p>
-    </aside>
+        <span aria-hidden className="text-ink-3 group-hover:text-accent-ink">
+          ↗
+        </span>
+      </span>
+      <span className="mt-2 line-clamp-2 block text-sm leading-snug text-ink-2">
+        {sponsor.description}
+      </span>
+    </a>
   );
 }
 
