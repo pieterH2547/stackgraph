@@ -155,7 +155,7 @@ build a schema in a local file instead.
 
 ```bash
 npm run verify           # typecheck + lint + tests + production build
-npm test                 # 230 tests, no network, no mail provider
+npm test                 # 241 tests, no network, no mail provider
 ```
 
 ### Environment
@@ -200,7 +200,7 @@ only affect that one path on the host.
 
 | Route | What happens |
 | --- | --- |
-| `/` | The global graph, then the hero search, recently connected, growing networks, the manifesto |
+| `/` | The global graph (Obsidian-style: favicons, hover, zoom, pan, drag), then the hero search, recently connected, growing networks, the manifesto |
 | `/add` | One field: your website. Called *Claim your company*, because half the companies people look for already have a profile waiting — paste a domain that exists and you land on its claim page. |
 | `/add/confirm` | "We found this" — name, one line, for whom, built by, category — and an address on the company's own domain. Nothing is created until the link sent there is opened: a company can only add itself. |
 | `/stack/[slug]` | **The unlock page.** One task: *Add 2 tools you genuinely use*, with one-click suggestions read from your own site. Every tool you pick states its own consequence — "Tally gets: Used by Acme" — because that consequence is the product. |
@@ -405,9 +405,11 @@ src/
     signals.ts             one-click suggestions read from the vendor's site
     notify.ts              recognition emails, dedupe and cooldown
     metrics.ts             the four-factor K and cycle time
-    graph.ts               deterministic graph geometry
+    graph.ts               graph geometry; the global layout is settled on the server
+    force.ts               the force layout, deterministic, shared by server and browser
+    favicon.ts             favicons for the graph, proxied and CDN-cached
     badge/                 the embeddable badge: svg, embed code, stats, serving
-  test/                    230 tests over the whole loop, and the sponsor wall
+  test/                    241 tests over the whole loop, and the sponsor wall
 scripts/                   db:push, db:seed, db:reset, db:inspect,
                            launchllama:score, launchllama:import
 ```
