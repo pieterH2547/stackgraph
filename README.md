@@ -144,7 +144,7 @@ build a schema in a local file instead.
 
 ```bash
 npm run verify           # typecheck + lint + tests + production build
-npm test                 # 163 tests, no network, no mail provider
+npm test                 # 180 tests, no network, no mail provider
 ```
 
 ### Environment
@@ -154,7 +154,7 @@ npm test                 # 163 tests, no network, no mail provider
 | `DATABASE_URL` | `file:` path locally, libSQL/Turso URL in production. `TURSO_DATABASE_URL` is accepted too, because that is the name Turso's own Vercel integration injects. On Vercel with neither, it falls back to `/tmp`: the app runs, but each serverless instance gets its own copy, so two requests can disagree and nothing survives. |
 | `DATABASE_AUTH_TOKEN` | Turso token, if the URL needs one. `TURSO_AUTH_TOKEN` is accepted as well. |
 | `NEXT_PUBLIC_SITE_URL` | Used for share links, claim links and OG images. Falls back to the Vercel URL. |
-| `RESEND_API_KEY` | With no key, every notification is written to the `notifications` table and printed to the log instead of being delivered, and claim links are shown on screen so the loop stays walkable locally. |
+| `RESEND_API_KEY` | With no key, every notification is written to the `notifications` table and printed to the log instead of being delivered. In development (`next dev`) sign-in and claim links are then shown on screen so the loop stays walkable locally. Never on a production or Vercel deployment: there a missing key makes "Email me a link" refuse with a clear message, because a link on screen signs in whoever typed the address and a domain-matching address is approved as owner on the spot. A provider error (an unverified sender domain, say) is reported as a failure too, not as "Link sent". |
 | `ADMIN_TOKEN` | Unlocks `/admin`. Unset means admin is unreachable. |
 | `SPONSOR_SALT` | Key material for the daily-rotating hash that tells a repeat sponsor impression from a new one. Optional: without it each server process picks its own, which is just as private but means two serverless instances can each count the same browser once. |
 | `DISABLE_SITE_DETECTION=1` | Never read vendor websites (used by the test suite). |
@@ -200,7 +200,7 @@ only affect that one path on the host.
 | `/share/[slug]` | A shareable card that credits the *other* tools |
 | `/network` | Everything, grouped by claimed / credited-not-claimed / incumbents |
 | `/advertise` | What a sponsored card is, what it is not, and one email address. No form, no price. |
-| `/admin`, `/admin/metrics` | Seeding, per-company inspection, and the K-factor |
+| `/admin`, `/admin/metrics` | Seeding, per-company inspection and removal, and the K-factor |
 | `/admin/sponsors` | Sponsors: create, schedule, switch on and off, and the impression / click / CTR report |
 
 ### Progressive unlock
@@ -346,7 +346,7 @@ src/
     notify.ts              recognition emails, dedupe and cooldown
     metrics.ts             the four-factor K and cycle time
     graph.ts               deterministic graph geometry
-  test/                    163 tests over the whole loop, and the sponsor wall
+  test/                    180 tests over the whole loop, and the sponsor wall
 scripts/                   db:push, db:seed, db:reset, db:inspect,
                            launchllama:score, launchllama:import
 ```

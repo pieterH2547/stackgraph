@@ -21,10 +21,20 @@ function Notice({ state }: { state: AdminFormState }) {
   return null;
 }
 
-function Save({ label = "Save" }: { label?: string }) {
+function Save({
+  label = "Save",
+  variant = "primary",
+}: {
+  label?: string;
+  variant?: "primary" | "secondary";
+}) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" className="btn btn-primary !py-2 !text-sm" disabled={pending}>
+    <button
+      type="submit"
+      className={`btn ${variant === "primary" ? "btn-primary" : "btn-secondary"} !py-2 !text-sm`}
+      disabled={pending}
+    >
       {pending ? "Working…" : label}
     </button>
   );
@@ -95,6 +105,51 @@ export function SeedCompanyForm({ action }: { action: AdminAction }) {
         Seeds go through the same flow as everyone else: unclaimed until they
         show both sides. A contact email is what makes them reachable.
       </p>
+      <Notice state={state} />
+    </form>
+  );
+}
+
+/**
+ * The one admin action with no undo, so the domain is typed back rather than
+ * clicked. What leaves with the company is spelled out above the field.
+ */
+export function RemoveCompanyForm({
+  action,
+  company,
+}: {
+  action: AdminAction;
+  company: Company;
+}) {
+  const [state, formAction] = useActionState<AdminFormState, FormData>(
+    action,
+    {},
+  );
+
+  return (
+    <form action={formAction} className="card border-accent p-5">
+      <p className="label">Remove this company</p>
+      <p className="max-w-xl text-sm leading-relaxed text-ink-2">
+        Takes {company.name} off the graph: every relationship in both
+        directions, its claims, memberships and notifications, and the events
+        that mention it. A profile that exists only because {company.name}{" "}
+        named it goes too. There is no undo.
+      </p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+        <div>
+          <label className="label" htmlFor="confirmDomain">
+            Type {company.domain} to confirm
+          </label>
+          <input
+            id="confirmDomain"
+            name="confirmDomain"
+            className="field"
+            autoComplete="off"
+            placeholder={company.domain}
+          />
+        </div>
+        <Save label="Remove" variant="secondary" />
+      </div>
       <Notice state={state} />
     </form>
   );

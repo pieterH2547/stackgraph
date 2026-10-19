@@ -15,7 +15,13 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function AdminPage() {
+export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
+  const query = await searchParams;
+  // Set by removeCompany, which has nowhere else to report: the page it was
+  // on is gone.
+  const removed = typeof query.removed === "string" ? query.removed : "";
+  const also = typeof query.also === "string" ? query.also : "";
+
   if (!(await isAdmin())) {
     return (
       <main className="mx-auto max-w-6xl px-5 py-16 sm:px-8">
@@ -46,6 +52,13 @@ export default async function AdminPage() {
           </Link>
         </div>
       </div>
+
+      {removed && (
+        <p className="mt-4 border-l-2 border-accent pl-3 text-sm">
+          Removed {removed}
+          {also ? `, and with it ${also.split(",").join(", ")}` : ""}.
+        </p>
+      )}
 
       <p className="mono mt-4 border-y border-line py-3 text-ink-3">
         <span className="text-ink">{padCount(stats.companies)}</span> companies ·{" "}

@@ -550,6 +550,69 @@ export async function deleteOrphanedMention(companyId: string): Promise<boolean>
   return true;
 }
 
+export interface CompanyRemoval {
+  removed: Company;
+  /** Profiles that existed only because this company named them. Gone too. */
+  alsoRemoved: Company[];
+  /** Relationships taken out of the graph, both directions. */
+  edges: number;
+}
+
+/**
+ * Takes a company off the graph by decision, which is the one thing
+ * `deleteOrphanedMention` is built to refuse. Admin only: a test profile, a
+ * profile created for a domain that is not a company, a request from the
+ * company itself.
+ *
+ * Everything that only made sense with it goes too, explicitly rather than
+ * trusted to a cascade: relationships in both directions (what it said about
+ * its stack, and what others said about using it), its claims, memberships
+ * and notifications, the events that mention it, and the claim intent on any
+ * sign-in link still pointing at it. A profile that existed only because this
+ * company named it leaves by the same narrow rule a retraction uses — never
+ * one that anybody else points at, claimed, or added themselves.
+ */
+export async function deleteCompany(
+  companyId: string,
+): Promise<CompanyRemoval | null> {
+  const company = await getCompanyById(companyId);
+  if (!company) return null;
+
+  const db = getDb();
+  const named = await db.execute({
+    sql: `SELECT target_company_id FROM relationships WHERE source_company_id = ?`,
+    args: [companyId],
+  });
+  const targets = named.rows.map((row) => str(row.target_company_id));
+
+  const counted = await db.execute({
+    sql: `SELECT COUNT(*) AS n FROM relationships
+          WHERE source_company_id = ?1 OR target_company_id = ?1`,
+    args: [companyId],
+  });
+  const edges = Number(counted.rows[0]?.n ?? 0);
+
+  for (const sql of [
+    `DELETE FROM relationships WHERE source_company_id = ?1 OR target_company_id = ?1`,
+    `DELETE FROM claims WHERE company_id = ?1`,
+    `DELETE FROM notifications WHERE company_id = ?1`,
+    `DELETE FROM company_members WHERE company_id = ?1`,
+    `UPDATE login_tokens SET intent_company_id = NULL, claim_draft = NULL WHERE intent_company_id = ?1`,
+    `DELETE FROM events WHERE company_id = ?1 OR target_company_id = ?1`,
+    `DELETE FROM companies WHERE id = ?1`,
+  ]) {
+    await db.execute({ sql, args: [companyId] });
+  }
+
+  const alsoRemoved: Company[] = [];
+  for (const targetId of targets) {
+    const target = await getCompanyById(targetId);
+    if (target && (await deleteOrphanedMention(targetId))) alsoRemoved.push(target);
+  }
+
+  return { removed: company, alsoRemoved, edges };
+}
+
 export async function deleteRelationship(relationshipId: string): Promise<void> {
   await getDb().execute({
     sql: `DELETE FROM relationships WHERE id = ?`,

@@ -3,7 +3,13 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { sendEmail } from "@/lib/email";
+import {
+  MAIL_FAILED_MESSAGE,
+  MAIL_UNAVAILABLE_MESSAGE,
+  mailUnavailable,
+  sendEmail,
+  showsDevLinks,
+} from "@/lib/email";
 import { brand } from "@/lib/brand";
 import { getCompanyBySlug } from "@/lib/db/queries";
 import { isValidEmail } from "@/lib/claims";
@@ -94,6 +100,13 @@ export async function sendSignInLink(
     return { ...typed, error: "That doesn't look like an email address." };
   }
 
+  /*
+   * Before a token exists. A deployment that cannot mail the link and must
+   * not show it has nothing to offer but the truth — a token it could never
+   * deliver would only be a sign-in waiting for whoever found it.
+   */
+  if (mailUnavailable()) return { ...typed, error: MAIL_UNAVAILABLE_MESSAGE };
+
   const company = intent ? await getCompanyBySlug(intent) : null;
 
   /*
@@ -120,7 +133,7 @@ export async function sendSignInLink(
     ? `Claim ${company.name} on ${brand.name}`
     : `Sign in to ${brand.name}`;
 
-  await sendEmail({
+  const result = await sendEmail({
     to: email,
     subject,
     text: [
@@ -136,17 +149,27 @@ export async function sendSignInLink(
     ].join("\n"),
   });
 
+  /*
+   * A provider that answered with an error did not send anything, and "Link
+   * sent" would leave the person watching an inbox that stays empty. The
+   * token stays valid, so a retry that does get through still works.
+   */
+  if (result.transport === "resend" && !result.delivered) {
+    console.error(`[whouseswhat] sign-in link not sent: ${result.error}`);
+    return { ...typed, error: MAIL_FAILED_MESSAGE };
+  }
+
   await track("claim_email_sent", {
     companyId: company?.id ?? null,
     props: { intent: company?.slug ?? null },
   });
 
   /*
-   * Without a mail provider the link is returned so the whole flow stays
-   * walkable locally. It is the same decision the claim flow already made, and
-   * it is only ever reachable when RESEND_API_KEY is unset.
+   * In development, with no mail provider, the link is returned so the whole
+   * flow stays walkable. `showsDevLinks` is the one place that decides this,
+   * and it never says yes on a production or Vercel deployment.
    */
-  const devLink = process.env.RESEND_API_KEY ? "" : ` ${link}`;
+  const devLink = showsDevLinks() ? ` ${link}` : "";
   return { sent: `Link sent to ${email}.${devLink}` };
 }
 
