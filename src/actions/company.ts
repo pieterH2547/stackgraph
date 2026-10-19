@@ -1,17 +1,43 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
-import { addCompany } from "@/lib/network";
-import { canEdit, grantEditAccess } from "@/lib/session";
+import { brand } from "@/lib/brand";
+import { canEdit } from "@/lib/session";
+import { canManage } from "@/lib/auth/session";
 import { getCompanyByDomain } from "@/lib/db/queries";
+import { isValidEmail } from "@/lib/claims";
 import { track } from "@/lib/events";
 import { InvalidSiteUrlError, normalizeSiteUrl } from "@/lib/url";
 import { routes } from "@/lib/routes";
-import { CATEGORIES } from "@/lib/brand";
+import { googleConfigured } from "@/lib/auth/google";
+import { domainProvesOwnership } from "@/lib/auth/claim";
+import {
+  addRefusal,
+  readAddDraft,
+  serializeAddDraft,
+  type AddDraft,
+} from "@/lib/auth/add";
+import { mailLoginLink } from "@/lib/auth/link";
+import { beginGoogleSignIn } from "@/lib/auth/start";
 
 export interface FormState {
   error?: string;
+  sent?: string;
+  /** What was typed, echoed back so a refused submit does not empty the form. */
+  values?: Record<string, string>;
+  /** Changes on every submit, so the fields remount with the echoed values. */
+  stamp?: string;
+}
+
+const ECHOED = ["name", "description", "category", "audience", "builtBy", "email"] as const;
+
+function echo(formData: FormData): Pick<FormState, "values" | "stamp"> {
+  const values: Record<string, string> = {};
+  for (const field of ECHOED) {
+    const value = formData.get(field);
+    if (typeof value === "string" && value) values[field] = value;
+  }
+  return { values, stamp: `${Date.now()}` };
 }
 
 /** Step 1: one field. A website is the only thing we ask for up front. */
@@ -38,66 +64,78 @@ export async function submitWebsite(
 }
 
 /**
- * Step 1b: the detected details, corrected by the person who knows. A company
- * whose domain is already in the network is not created again — depending on
- * its state that person either claims it or already owns it.
+ * A domain that is already on the graph is never added again. Depending on
+ * who is asking, they manage it already, can claim it, or can look at it.
  */
-export async function confirmCompany(
+async function sendToExisting(domain: string): Promise<void> {
+  const existing = await getCompanyByDomain(domain);
+  if (!existing) return;
+  if (await canManage(existing.id)) redirect(routes.manage(existing.slug));
+  if (await canEdit(existing.id)) redirect(routes.stack(existing.slug));
+  if (existing.status === "UNCLAIMED") redirect(routes.claim(existing.slug));
+  redirect(routes.profile(existing.slug));
+}
+
+/**
+ * Step 2: the detected details, corrected by the person who knows — and an
+ * address that proves they are that company.
+ *
+ * Nothing is created here. A company can only add itself, so the profile is
+ * held as a draft next to a sign-in link, the link goes to an address on the
+ * company's own domain, and opening it is what creates the profile. A free
+ * mailbox or another company's domain is refused before any link exists.
+ */
+export async function requestAddLink(
   _state: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const url = String(formData.get("url") ?? "");
-  const name = String(formData.get("name") ?? "").trim();
-  const description = String(formData.get("description") ?? "").trim();
-  const categoryRaw = String(formData.get("category") ?? "").trim();
-  const audience = String(formData.get("audience") ?? "").trim();
-  const builtBy = String(formData.get("builtBy") ?? "").trim();
-  const logoUrl = String(formData.get("logoUrl") ?? "").trim();
-  const detectedAt = String(formData.get("detectedAt") ?? "").trim();
-  const detectedFrom = String(formData.get("detectedFrom") ?? "").trim();
+  const typed = echo(formData);
 
-  if (name.length < 2) return { error: "A company needs a name." };
-  if (name.length > 60) return { error: "That name is too long." };
+  const read = readAddDraft(formData);
+  if ("error" in read) return { ...typed, error: read.error };
+  const { draft } = read;
 
-  const category = (CATEGORIES as readonly string[]).includes(categoryRaw)
-    ? categoryRaw
-    : null;
+  await sendToExisting(draft.domain);
 
-  let normalized;
-  try {
-    normalized = normalizeSiteUrl(url);
-  } catch {
-    return { error: "That doesn't look like a website address." };
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  if (!isValidEmail(email)) {
+    return { ...typed, error: "That doesn't look like an email address." };
   }
 
-  const existing = await getCompanyByDomain(normalized.domain);
-  if (existing) {
-    // Someone may already have credited them, or they may be mid-claim.
-    if (await canEdit(existing.id)) redirect(routes.stack(existing.slug));
-    if (existing.status === "UNCLAIMED") redirect(routes.claim(existing.slug));
-    redirect(routes.profile(existing.slug));
-  }
+  const { proves, freeMailbox } = domainProvesOwnership(email, draft.domain);
+  if (!proves) return { ...typed, error: addRefusal(draft.domain, freeMailbox) };
 
-  const { company } = await addCompany({
-    url: normalized.website,
-    name,
-    description: description || null,
-    category,
-    audience: audience.slice(0, 60) || null,
-    builtBy: builtBy.slice(0, 60) || null,
-    logoUrl: logoUrl || null,
-    source: "SELF_ADDED",
-    // Adding your own company settles identity — the same door a claim goes
-    // through. The profile turns CLAIMED once both sides of the company are
-    // shown, and not before.
-    status: "UNCLAIMED",
-    claimVerifiedAt: new Date().toISOString(),
-    detectedAt: detectedAt || null,
-    detectedFrom: detectedFrom || null,
+  const mailed = await mailLoginLink({
+    email,
+    subject: `Add ${draft.name} to ${brand.name}`,
+    intro: `Here is your link to add ${draft.name} to ${brand.name}.`,
+    claimDraft: serializeAddDraft(draft),
   });
+  if (!mailed.ok) return { ...typed, error: mailed.error };
 
-  await grantEditAccess(company.id);
-  await track("stack_started", { companyId: company.id });
-  revalidatePath(routes.home());
-  redirect(routes.stack(company.slug));
+  return {
+    ...typed,
+    sent: `Link sent to ${email}. Open it to add ${draft.name}, then name two tools you use.${
+      mailed.devLink ? ` ${mailed.devLink}` : ""
+    }`,
+  };
+}
+
+/**
+ * The same, through Google. There is no address to check before leaving, so
+ * the draft rides in a cookie and the callback checks the address Google
+ * vouches for against the domain — see `settleAdd`.
+ */
+export async function startGoogleAdd(formData: FormData): Promise<void> {
+  const url = String(formData.get("url") ?? "");
+  if (!googleConfigured()) {
+    redirect(`${routes.addConfirm(url)}&error=google-unavailable`);
+  }
+
+  const read = readAddDraft(formData);
+  if ("error" in read) redirect(`${routes.addConfirm(url)}&error=draft`);
+  const draft: AddDraft = read.draft;
+
+  await sendToExisting(draft.domain);
+  await beginGoogleSignIn("", serializeAddDraft(draft));
 }

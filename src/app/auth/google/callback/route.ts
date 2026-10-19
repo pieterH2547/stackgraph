@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { routes } from "@/lib/routes";
 import { exchangeGoogleCode } from "@/lib/auth/google";
+import { addDestination, parseAddDraft, settleAdd } from "@/lib/auth/add";
 import { settleOwnership } from "@/lib/auth/claim";
 import { applyClaimDraft, parseDraft } from "@/lib/auth/draft";
 import { startSession } from "@/lib/auth/session";
+import { DRAFT_COOKIE, OAUTH_COOKIE } from "@/lib/auth/start";
 import { upsertUser } from "@/lib/auth/store";
 import { getCompanyBySlug } from "@/lib/db/queries";
 
@@ -24,13 +26,16 @@ export async function GET(request: Request) {
   const state = url.searchParams.get("state") ?? "";
 
   const store = await cookies();
-  const expected = store.get("wuw_oauth")?.value ?? "";
-  store.delete("wuw_oauth");
+  const expected = store.get(OAUTH_COOKIE)?.value ?? "";
+  store.delete(OAUTH_COOKIE);
 
   // Read once and clear either way: a draft that outlived a failed or
-  // abandoned sign-in must not attach itself to the next one.
-  const draft = parseDraft(store.get("wuw_claim")?.value);
-  store.delete("wuw_claim");
+  // abandoned sign-in must not attach itself to the next one. A claim draft
+  // and an add draft share the cookie; each parser refuses the other.
+  const rawDraft = store.get(DRAFT_COOKIE)?.value;
+  const draft = parseDraft(rawDraft);
+  const add = parseAddDraft(rawDraft);
+  store.delete(DRAFT_COOKIE);
 
   const [nonce, ...intentParts] = state.split(":");
   const intentSlug = intentParts.join(":");
@@ -55,6 +60,14 @@ export async function GET(request: Request) {
     provider: "google",
   });
   await startSession(user.id);
+
+  // Adding a company that is not on the graph yet. Google vouched for the
+  // address; settleAdd decides whether it proves the domain.
+  if (!intentSlug && add) {
+    return NextResponse.redirect(
+      new URL(addDestination(await settleAdd({ user, draft: add }), add.domain), url),
+    );
+  }
 
   const company = intentSlug ? await getCompanyBySlug(intentSlug) : null;
   if (!company) {

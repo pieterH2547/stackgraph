@@ -22,21 +22,30 @@ export interface DetectedFields {
  * company's own site where we could read it. This is the entire vendor form:
  * no features, no pricing, no positioning essay — what you build and who it's
  * for. Anything we couldn't detect stays blank rather than guessed at.
+ *
+ * The address comes last, and it has to be on the company's own domain: a
+ * company can only add itself. Nothing typed here is published until the link
+ * we send to that address is opened.
  */
 export function ConfirmCompanyForm({
   action,
+  googleAction,
   detected,
 }: {
   action: (state: FormState, formData: FormData) => Promise<FormState>;
+  /** Absent when Google sign-in is not configured. */
+  googleAction?: (formData: FormData) => Promise<void>;
   detected: DetectedFields;
 }) {
   const [state, formAction] = useActionState<FormState, FormData>(action, {});
+  const was = (field: string, fallback: string) =>
+    state.values?.[field] ?? fallback;
   const [name, setName] = useState(detected.name);
   const [logoUrl, setLogoUrl] = useState(detected.logoUrl ?? "");
   const [showLogoField, setShowLogoField] = useState(false);
 
   return (
-    <form action={formAction} className="mt-8 max-w-xl">
+    <form action={formAction} key={state.stamp ?? "initial"} className="mt-8 max-w-xl">
       <input type="hidden" name="url" value={detected.website} />
       <input type="hidden" name="detectedAt" value={detected.detectedAt} />
       <input type="hidden" name="detectedFrom" value={detected.detectedFrom} />
@@ -101,7 +110,7 @@ export function ConfirmCompanyForm({
           type="text"
           maxLength={180}
           className="field"
-          defaultValue={detected.description ?? ""}
+          defaultValue={was("description", detected.description ?? "")}
           placeholder="AI customer support for small teams."
         />
       </div>
@@ -117,6 +126,7 @@ export function ConfirmCompanyForm({
             type="text"
             maxLength={60}
             className="field"
+            defaultValue={was("audience", "")}
             placeholder="Small SaaS teams"
           />
         </div>
@@ -130,6 +140,7 @@ export function ConfirmCompanyForm({
             type="text"
             maxLength={60}
             className="field"
+            defaultValue={was("builtBy", "")}
             placeholder="Two founders in Ghent"
           />
         </div>
@@ -143,7 +154,7 @@ export function ConfirmCompanyForm({
           id="category"
           name="category"
           className="field"
-          defaultValue={detected.category ?? ""}
+          defaultValue={was("category", detected.category ?? "")}
         >
           <option value="">Not sure yet</option>
           {CATEGORIES.map((category) => (
@@ -154,14 +165,43 @@ export function ConfirmCompanyForm({
         </select>
       </div>
 
+      <div className="mt-6 border-t border-line pt-5">
+        <label className="label" htmlFor="add-email">
+          Your @{detected.domain} address
+        </label>
+        <input
+          id="add-email"
+          name="email"
+          type="email"
+          required
+          autoComplete="email"
+          className="field"
+          defaultValue={was("email", "")}
+          placeholder={`you@${detected.domain}`}
+        />
+        <p className="mono mt-2 text-ink-3">
+          Only someone at {detected.domain} can add it. We send a link to that
+          address; nothing appears on the graph until you open it.
+        </p>
+      </div>
+
       {state.error && (
         <p className="mt-4 border-l-2 border-accent pl-3 text-sm text-accent-ink">
           {state.error}
         </p>
       )}
+      {state.sent && (
+        <p className="mt-4 border-l-2 border-accent pl-3 text-sm">{state.sent}</p>
+      )}
 
-      <div className="mt-7">
+      <div className="mt-7 flex flex-wrap items-center gap-3">
         <Submit />
+        {googleAction && (
+          <>
+            <span className="mono text-ink-3">or</span>
+            <GoogleButton action={googleAction} />
+          </>
+        )}
       </div>
     </form>
   );
@@ -171,7 +211,27 @@ function Submit() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" className="btn btn-primary" disabled={pending}>
-      {pending ? "Saving…" : "That’s us — continue"}
+      {pending ? "Sending…" : "That’s us — email me a link"}
+    </button>
+  );
+}
+
+function GoogleButton({
+  action,
+}: {
+  action: (formData: FormData) => Promise<void>;
+}) {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      // Google needs no address typed; it vouches for one.
+      formNoValidate
+      formAction={action}
+      disabled={pending}
+      className="btn btn-secondary"
+    >
+      {pending ? "Opening Google…" : "Continue with Google"}
     </button>
   );
 }

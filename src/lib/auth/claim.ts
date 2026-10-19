@@ -1,7 +1,29 @@
-import { getCompanyById, markCompanyClaimed } from "../db/queries";
+import { getCompanyById, updateCompany } from "../db/queries";
 import { emailDomain, PUBLIC_EMAIL_DOMAINS } from "../claims";
 import { track } from "../events";
+import { nowIso } from "../ids";
+import { settleClaim } from "../network";
 import { addMember, companyHasMembers, type User } from "./store";
+
+/**
+ * Identity is proved; the claim is not yet earned.
+ *
+ * Proving the address makes this person the company's manager, and that is
+ * all it does. CLAIMED is the claim gate's to give — identity plus two
+ * independent tools, `settleClaim` in network.ts — so a domain match alone no
+ * longer turns a profile CLAIMED. A company that already credits two tools is
+ * claimed on the spot, because that gate is met too.
+ */
+async function recordProvedIdentity(companyId: string, email: string | null) {
+  const company = await getCompanyById(companyId);
+  if (!company) return;
+  await updateCompany(companyId, {
+    claimVerifiedAt: company.claimVerifiedAt ?? nowIso(),
+    ...(email && !company.contactEmail ? { contactEmail: email } : {}),
+  });
+  const refreshed = await getCompanyById(companyId);
+  if (refreshed) await settleClaim(refreshed);
+}
 
 /**
  * Turning a signed-in person into the owner of a company.
@@ -73,8 +95,9 @@ export function domainProvesOwnership(
 }
 
 /**
- * Decide, and act. Approving writes the membership and marks the company
- * claimed; pending writes nothing but the event, so an unapproved claim can
+ * Decide, and act. Approving writes the membership and records the proved
+ * identity; the profile turns CLAIMED once it also names two independent
+ * tools. Pending writes nothing but the event, so an unapproved claim can
  * never be mistaken for ownership.
  */
 export async function settleOwnership(input: {
@@ -110,7 +133,7 @@ export async function settleOwnership(input: {
   }
 
   await addMember({ userId: input.user.id, companyId: company.id, role: "OWNER" });
-  await markCompanyClaimed(company.id);
+  await recordProvedIdentity(company.id, input.user.email);
   await track("claim_verified", {
     companyId: company.id,
     props: { decision: "APPROVED", reason: "DOMAIN_MATCH", email: input.user.email },
@@ -125,7 +148,7 @@ export async function approveOwnership(input: {
   companyId: string;
 }): Promise<void> {
   await addMember({ ...input, role: "OWNER" });
-  await markCompanyClaimed(input.companyId);
+  await recordProvedIdentity(input.companyId, null);
   await track("claim_verified", {
     companyId: input.companyId,
     props: { decision: "APPROVED", reason: "ADMIN_REVIEW" },

@@ -1,25 +1,16 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
-import {
-  MAIL_FAILED_MESSAGE,
-  MAIL_UNAVAILABLE_MESSAGE,
-  mailUnavailable,
-  sendEmail,
-  showsDevLinks,
-} from "@/lib/email";
 import { brand } from "@/lib/brand";
 import { getCompanyBySlug } from "@/lib/db/queries";
 import { isValidEmail } from "@/lib/claims";
-import { track } from "@/lib/events";
 import { routes } from "@/lib/routes";
-import { absoluteUrl } from "@/lib/url";
-import { googleAuthUrl, googleConfigured } from "@/lib/auth/google";
+import { googleConfigured } from "@/lib/auth/google";
 import { endSession } from "@/lib/auth/session";
-import { createLoginToken, newStateToken } from "@/lib/auth/store";
 import { readClaimDraft, serializeDraft } from "@/lib/auth/draft";
+import { mailLoginLink } from "@/lib/auth/link";
+import { beginGoogleSignIn } from "@/lib/auth/start";
 
 export interface SignInState {
   error?: string;
@@ -59,28 +50,6 @@ function echo(formData: FormData): Pick<SignInState, "values" | "stamp"> {
 }
 
 /**
- * The claim form's contents, for the Google door.
- *
- * Google's round trip is a redirect in the same browser, so a short-lived
- * httpOnly cookie carries the draft without a second table. The email door
- * cannot use one — that link is opened on a phone as often as not — so it
- * keeps its draft on the token row instead.
- */
-const DRAFT_COOKIE = "wuw_claim";
-const DRAFT_MINUTES = 30;
-
-async function stashDraft(value: string): Promise<void> {
-  const store = await cookies();
-  store.set(DRAFT_COOKIE, value, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: DRAFT_MINUTES * 60,
-  });
-}
-
-/**
  * Sign in by email link.
  *
  * `intent` is the slug the person was trying to claim. It is stored with the
@@ -100,13 +69,6 @@ export async function sendSignInLink(
     return { ...typed, error: "That doesn't look like an email address." };
   }
 
-  /*
-   * Before a token exists. A deployment that cannot mail the link and must
-   * not show it has nothing to offer but the truth — a token it could never
-   * deliver would only be a sign-in waiting for whoever found it.
-   */
-  if (mailUnavailable()) return { ...typed, error: MAIL_UNAVAILABLE_MESSAGE };
-
   const company = intent ? await getCompanyBySlug(intent) : null;
 
   /*
@@ -122,55 +84,22 @@ export async function sendSignInLink(
     claimDraft = serializeDraft(read.draft);
   }
 
-  const token = await createLoginToken({
+  const mailed = await mailLoginLink({
     email,
+    subject: company
+      ? `Claim ${company.name} on ${brand.name}`
+      : `Sign in to ${brand.name}`,
+    intro: company
+      ? `Here is your link to claim ${company.name}.`
+      : "Here is your sign-in link.",
     intentCompanyId: company?.id ?? null,
     claimDraft,
   });
+  if (!mailed.ok) return { ...typed, error: mailed.error };
 
-  const link = absoluteUrl(`/auth/link?token=${token.token}`);
-  const subject = company
-    ? `Claim ${company.name} on ${brand.name}`
-    : `Sign in to ${brand.name}`;
-
-  const result = await sendEmail({
-    to: email,
-    subject,
-    text: [
-      company
-        ? `Here is your link to claim ${company.name}.`
-        : "Here is your sign-in link.",
-      "",
-      link,
-      "",
-      "It works once and expires in 30 minutes. If you didn't ask for it, ignore this email — nothing happens until the link is opened.",
-      "",
-      `— ${brand.name}, ${brand.category}.`,
-    ].join("\n"),
-  });
-
-  /*
-   * A provider that answered with an error did not send anything, and "Link
-   * sent" would leave the person watching an inbox that stays empty. The
-   * token stays valid, so a retry that does get through still works.
-   */
-  if (result.transport === "resend" && !result.delivered) {
-    console.error(`[whouseswhat] sign-in link not sent: ${result.error}`);
-    return { ...typed, error: MAIL_FAILED_MESSAGE };
-  }
-
-  await track("claim_email_sent", {
-    companyId: company?.id ?? null,
-    props: { intent: company?.slug ?? null },
-  });
-
-  /*
-   * In development, with no mail provider, the link is returned so the whole
-   * flow stays walkable. `showsDevLinks` is the one place that decides this,
-   * and it never says yes on a production or Vercel deployment.
-   */
-  const devLink = showsDevLinks() ? ` ${link}` : "";
-  return { sent: `Link sent to ${email}.${devLink}` };
+  return {
+    sent: `Link sent to ${email}.${mailed.devLink ? ` ${mailed.devLink}` : ""}`,
+  };
 }
 
 /** Google, with CSRF state and the claim intent riding along inside it. */
@@ -188,29 +117,16 @@ export async function startGoogleSignIn(
    * failing the sign-in: the person still gets in, and the form they see
    * afterwards is the one where a mistake is worth reporting.
    */
+  let draft: string | null = null;
   if (formData && intentSlug) {
     const company = await getCompanyBySlug(intentSlug);
     if (company) {
       const read = readClaimDraft(company, formData);
-      if ("draft" in read) await stashDraft(serializeDraft(read.draft));
+      if ("draft" in read) draft = serializeDraft(read.draft);
     }
   }
 
-  const nonce = newStateToken();
-  const store = await cookies();
-  store.set("wuw_oauth", nonce, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 600,
-  });
-
-  // The state is checked on the way back, so it must be unguessable and it
-  // must be the thing that carries the intent — not a query parameter the
-  // caller could edit.
-  const state = `${nonce}:${intentSlug}`;
-  redirect(googleAuthUrl(state));
+  await beginGoogleSignIn(intentSlug, draft);
 }
 
 export async function signOut(): Promise<void> {
