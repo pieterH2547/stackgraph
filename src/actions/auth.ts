@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { brand } from "@/lib/brand";
 import { getCompanyBySlug } from "@/lib/db/queries";
+import { LINK_ON_SCREEN_MESSAGE } from "@/lib/email";
 import { isValidEmail } from "@/lib/claims";
 import { routes } from "@/lib/routes";
 import { googleConfigured } from "@/lib/auth/google";
@@ -15,6 +16,8 @@ import { beginGoogleSignIn } from "@/lib/auth/start";
 export interface SignInState {
   error?: string;
   sent?: string;
+  /** The link itself, when it is shown on screen instead of mailed. */
+  link?: string;
   /**
    * What was typed, echoed back.
    *
@@ -97,9 +100,10 @@ export async function sendSignInLink(
   });
   if (!mailed.ok) return { ...typed, error: mailed.error };
 
-  return {
-    sent: `Link sent to ${email}.${mailed.devLink ? ` ${mailed.devLink}` : ""}`,
-  };
+  if (mailed.devLink) {
+    return { sent: LINK_ON_SCREEN_MESSAGE, link: mailed.devLink };
+  }
+  return { sent: `Link sent to ${email}.` };
 }
 
 /** Google, with CSRF state and the claim intent riding along inside it. */

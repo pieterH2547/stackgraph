@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { countRows, resetDatabase } from "./helpers";
 import {
+  LINK_ON_SCREEN_MESSAGE,
   MAIL_FAILED_MESSAGE,
   MAIL_UNAVAILABLE_MESSAGE,
   adminAddress,
@@ -75,61 +76,53 @@ function claimForm(email: string): FormData {
 }
 
 /* -------------------------------------------------------------------------- */
+/*
+ * Launch-period rule (2026-11-03, Pieter's decision): wherever nothing can
+ * deliver mail, the link is shown on screen, production included. The key
+ * is the off switch: set RESEND_API_KEY and the link goes by mail again.
+ */
 describe("when a link may be shown on screen", () => {
-  it("only in development, and only with no mail provider", () => {
+  it("wherever there is no mail provider, production included", () => {
     expect(showsDevLinks({})).toBe(true);
     expect(showsDevLinks({ NODE_ENV: "development" })).toBe(true);
-    expect(showsDevLinks({ NODE_ENV: "test" })).toBe(true);
-  });
-
-  it("never on a production build", () => {
-    expect(showsDevLinks({ NODE_ENV: "production" })).toBe(false);
-  });
-
-  it("never on Vercel, previews included", () => {
-    expect(showsDevLinks({ VERCEL: "1" })).toBe(false);
-    expect(showsDevLinks({ VERCEL: "1", NODE_ENV: "development" })).toBe(false);
+    expect(showsDevLinks({ NODE_ENV: "production" })).toBe(true);
+    expect(showsDevLinks({ VERCEL: "1" })).toBe(true);
   });
 
   it("never when mail can actually be delivered", () => {
     expect(showsDevLinks({ RESEND_API_KEY: "re_test" })).toBe(false);
+    expect(showsDevLinks({ RESEND_API_KEY: "re_test", NODE_ENV: "production" })).toBe(false);
   });
 
-  it("names the deployment that can neither mail nor show a link", () => {
-    expect(mailUnavailable({ NODE_ENV: "production" })).toBe(true);
-    expect(mailUnavailable({ VERCEL: "1" })).toBe(true);
+  it("so no deployment is left unable to hand out a link", () => {
+    expect(mailUnavailable({ NODE_ENV: "production" })).toBe(false);
+    expect(mailUnavailable({ VERCEL: "1" })).toBe(false);
     expect(mailUnavailable({ NODE_ENV: "production", RESEND_API_KEY: "re_test" })).toBe(false);
     expect(mailUnavailable({})).toBe(false);
+    expect(MAIL_UNAVAILABLE_MESSAGE).toBeTruthy();
   });
 });
 
 /* -------------------------------------------------------------------------- */
 describe("the sign-in link", () => {
-  it("is shown on screen in development without a mail provider", async () => {
+  it("is shown on screen, as a link apart from the message, without a mail provider", async () => {
     setEnv({});
     const state = await sendSignInLink({}, signInForm("sam@acme.dev"));
     expect(state.error).toBeUndefined();
-    expect(state.sent).toContain("Link sent to sam@acme.dev.");
-    expect(state.sent).toContain("http://localhost:3000/auth/link?token=");
+    expect(state.sent).toBe(LINK_ON_SCREEN_MESSAGE);
+    expect(state.link).toContain("http://localhost:3000/auth/link?token=");
     expect(await countRows("login_tokens")).toBe(1);
   });
 
-  it("is refused outright on a production deployment without a mail provider", async () => {
+  it("is shown on screen on a production deployment too, and logged", async () => {
     setEnv({ NODE_ENV: "production" });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const state = await sendSignInLink({}, signInForm("sam@acme.dev"));
-    expect(state.error).toBe(MAIL_UNAVAILABLE_MESSAGE);
-    expect(state.sent).toBeUndefined();
-    // No token was minted for a link nobody can receive, and nothing was
-    // counted as sent.
-    expect(await countRows("login_tokens")).toBe(0);
-    expect(await countRows("events")).toBe(0);
-  });
-
-  it("is refused on Vercel too, however the build was made", async () => {
-    setEnv({ VERCEL: "1", NODE_ENV: "development" });
-    const state = await sendSignInLink({}, signInForm("sam@acme.dev"));
-    expect(state.error).toBe(MAIL_UNAVAILABLE_MESSAGE);
-    expect(await countRows("login_tokens")).toBe(0);
+    expect(state.error).toBeUndefined();
+    expect(state.link).toContain("/auth/link?token=");
+    expect(await countRows("login_tokens")).toBe(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("shown on screen"));
+    warn.mockRestore();
   });
 
   it("never puts the link in the response when a provider is configured", async () => {
@@ -184,13 +177,16 @@ describe("the claim link", () => {
     expect(state.devLink).toContain("/claim/acme/verify?token=");
   });
 
-  it("is refused on a production deployment without a mail provider", async () => {
+  it("is shown on screen on a production deployment too, and logged", async () => {
     setEnv({ NODE_ENV: "production" });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const acme = await unclaimedAcme();
     const state = await startClaim(acme.slug, {}, claimForm("sam@acme.dev"));
-    expect(state.error).toBe(MAIL_UNAVAILABLE_MESSAGE);
-    expect(state.devLink).toBeUndefined();
-    expect(await countRows("claims")).toBe(0);
+    expect(state.error).toBeUndefined();
+    expect(state.devLink).toContain("/claim/acme/verify?token=");
+    expect(await countRows("claims")).toBe(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("shown on screen"));
+    warn.mockRestore();
   });
 
   it("keeps the link out of the response when a provider is configured", async () => {

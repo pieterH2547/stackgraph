@@ -165,7 +165,7 @@ npm test                 # 241 tests, no network, no mail provider
 | `DATABASE_URL` | `file:` path locally, libSQL/Turso URL in production. `TURSO_DATABASE_URL` is accepted too, because that is the name Turso's own Vercel integration injects. On Vercel with neither, it falls back to `/tmp`: the app runs, but each serverless instance gets its own copy, so two requests can disagree and nothing survives. |
 | `DATABASE_AUTH_TOKEN` | Turso token, if the URL needs one. `TURSO_AUTH_TOKEN` is accepted as well. |
 | `NEXT_PUBLIC_SITE_URL` | Used for share links, claim links and OG images. Falls back to the Vercel URL. |
-| `RESEND_API_KEY` | With no key, every notification is written to the `notifications` table and printed to the log instead of being delivered. In development (`next dev`) sign-in and claim links are then shown on screen so the loop stays walkable locally. Never on a production or Vercel deployment: there a missing key makes "Email me a link" refuse with a clear message, because a link on screen signs in whoever typed the address and a domain-matching address is approved as owner on the spot. A provider error (an unverified sender domain, say) is reported as a failure too, not as "Link sent". |
+| `RESEND_API_KEY` | With no key, every notification is written to the `notifications` table and printed to the log instead of being delivered, and sign-in and claim links are shown on screen instead of mailed — **in production too, for the launch period** (decision of 2026-11-03, see below). A provider error (an unverified sender domain, say) is reported as a failure, not as "Link sent". |
 | `EMAIL_FROM` | The sending address. Its domain must be verified in Resend. |
 | `EMAIL_REPLY_TO` | Where a reply to any mail we send lands: a person's inbox, so the sending domain never needs a mailbox. Unset: replies go to `EMAIL_FROM`. |
 | `CONTACT_EMAIL` | The one public address on the site, on `/advertise`. Defaults to `hello@` on the brand domain. |
@@ -489,9 +489,21 @@ useless for a test.
 **Mail.** Three mails leave the site, and every one of them is the product:
 the sign-in link (the only proof of identity), the recognition mail to a
 vendor somebody just credited (the flywheel), and the reminder to whoever
-runs the site when a claim needs a human. None of them can be shown on
-screen instead, so production needs mail that actually arrives. The
-checklist, in order:
+runs the site when a claim needs a human.
+
+**Launch period, until `RESEND_API_KEY` is set (decision of 2026-11-03).**
+Without a mail provider the sign-in and claim links are shown on screen,
+in production too, with an "Open my link" button and an honest line above
+it. That means a claim is *not* proved during this period: whoever types an
+address on the company's domain gets in, and that is the trade — a claim
+nobody can finish is worse than a claim not yet proved, and nine claimed
+companies are a catalogue one person can watch. Every such link is logged
+with a `shown on screen` warning. The recognition mail to vendors is
+recorded but not delivered, so the flywheel is on hold until mail exists.
+The period ends by itself: set the key and the link goes by mail again,
+with nothing to change back in the code.
+
+The checklist for ending it, in order:
 
 1. In Resend, add the brand domain as a sending domain and put its two DNS
    records (SPF and DKIM) at the DNS provider. Wait for *verified*. A mail

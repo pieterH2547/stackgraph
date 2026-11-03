@@ -55,25 +55,29 @@ export function adminAddress(env: EnvLike = process.env): string | null {
 }
 
 /**
- * True when a sign-in or claim link may be shown on screen instead of mailed.
+ * True when a sign-in or claim link may be shown on screen instead of mailed:
+ * whenever nothing can deliver mail, in every environment.
  *
- * Only in development, and only when nothing can deliver mail. On a public
- * deployment the answer is no whatever else is configured: a link on screen
- * signs in whoever typed the address, and an address on the company's own
- * domain is approved as its owner on the spot — so a production deployment
- * without a mail provider was handing every profile to anyone who asked. That
- * is a misconfiguration to surface, not to paper over.
+ * Until 2026-11-03 this was development only, and a production deployment
+ * without a mail provider refused to hand out links at all, because a link on
+ * screen signs in whoever typed the address and an address on the company's
+ * own domain is approved as its owner on the spot. That is still true, and it
+ * is the trade Pieter chose for the launch period: a claim that nobody can
+ * finish is worse than a claim that is not yet proved, and the catalogue is
+ * small enough to watch by hand. The rule ends on its own the moment
+ * `RESEND_API_KEY` is set, because then the link goes by mail again and
+ * nothing here needs changing back. Every on-screen link on a public
+ * deployment is logged so the period leaves a trace.
  */
 export function showsDevLinks(env: EnvLike = process.env): boolean {
-  if (emailTransport(env) !== "outbox") return false;
-  if (env.NODE_ENV === "production") return false;
-  if (env.VERCEL) return false;
-  return true;
+  return emailTransport(env) === "outbox";
 }
 
 /**
- * Nothing can deliver mail and nothing may show a link either. The only
- * honest answer to "email me a link" is then to say so.
+ * Nothing can deliver mail and nothing may show a link either. Since links
+ * are shown wherever mail is missing, this is never true at the moment; the
+ * call sites keep asking so the refusal comes back with one line here when
+ * the launch period ends.
  */
 export function mailUnavailable(env: EnvLike = process.env): boolean {
   return emailTransport(env) === "outbox" && !showsDevLinks(env);
@@ -81,6 +85,19 @@ export function mailUnavailable(env: EnvLike = process.env): boolean {
 
 export const MAIL_UNAVAILABLE_MESSAGE =
   "Email isn't set up on this deployment yet, so no link can be sent. Try again later.";
+
+/** What the page says above an on-screen link. Honest, and not a warning. */
+export const LINK_ON_SCREEN_MESSAGE =
+  "Email isn't switched on here yet, so here is your link instead:";
+
+/** A link left the server other than by mail. In production that is news. */
+export function noteLinkOnScreen(purpose: string, email: string): void {
+  if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
+    console.warn(
+      `[whouseswhat] ${purpose} link shown on screen (no RESEND_API_KEY) for ${email}`,
+    );
+  }
+}
 
 export const MAIL_FAILED_MESSAGE =
   "The email couldn't be sent just now. Try again in a minute.";

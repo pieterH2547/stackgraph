@@ -18,11 +18,14 @@ import {
   type AddDraft,
 } from "@/lib/auth/add";
 import { mailLoginLink } from "@/lib/auth/link";
+import { LINK_ON_SCREEN_MESSAGE } from "@/lib/email";
 import { beginGoogleSignIn } from "@/lib/auth/start";
 
 export interface FormState {
   error?: string;
   sent?: string;
+  /** The link itself, when it is shown on screen instead of mailed. */
+  link?: string;
   /** What was typed, echoed back so a refused submit does not empty the form. */
   values?: Record<string, string>;
   /** Changes on every submit, so the fields remount with the echoed values. */
@@ -113,11 +116,12 @@ export async function requestAddLink(
   });
   if (!mailed.ok) return { ...typed, error: mailed.error };
 
+  if (mailed.devLink) {
+    return { ...typed, sent: LINK_ON_SCREEN_MESSAGE, link: mailed.devLink };
+  }
   return {
     ...typed,
-    sent: `Link sent to ${email}. Open it to add ${draft.name}, then name two tools you use.${
-      mailed.devLink ? ` ${mailed.devLink}` : ""
-    }`,
+    sent: `Link sent to ${email}. Open it to add ${draft.name}, then name two tools you use.`,
   };
 }
 
