@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { brand } from "@/lib/brand";
+import { contactAddress } from "@/lib/email";
 import { routes } from "@/lib/routes";
 import { absoluteUrl } from "@/lib/url";
 
@@ -26,7 +27,8 @@ export const metadata: Metadata = {
  * page knows exactly what they are buying and exactly what they are not.
  */
 export default function AdvertisePage() {
-  const mailto = `mailto:${brand.contactEmail}?subject=${encodeURIComponent(
+  const contact = contactAddress();
+  const mailto = `mailto:${contact}?subject=${encodeURIComponent(
     `Sponsoring ${brand.name}`,
   )}`;
 
@@ -93,7 +95,7 @@ export default function AdvertisePage() {
         </p>
         <div className="mt-5 flex flex-wrap items-center gap-4">
           <a href={mailto} className="btn btn-primary">
-            Email {brand.contactEmail}
+            Email {contact}
           </a>
           <Link
             href={routes.home()}

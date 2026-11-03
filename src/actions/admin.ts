@@ -9,6 +9,9 @@ import {
   listIncomingEdges,
   updateCompany,
 } from "@/lib/db/queries";
+import { approveOwnership } from "@/lib/auth/claim";
+import { companyHasMembers, upsertUser } from "@/lib/auth/store";
+import { isValidEmail } from "@/lib/claims";
 import { addCompany } from "@/lib/network";
 import { notifyMention } from "@/lib/notify";
 import { grantAdmin, isAdmin } from "@/lib/session";
@@ -145,6 +148,39 @@ export async function removeCompany(
   const query = new URLSearchParams({ removed: company.domain });
   if (also.length) query.set("also", also.join(","));
   redirect(`/admin?${query}`);
+}
+
+/**
+ * The human decision the pending-claim mail asks for. An address that could
+ * not prove the domain is made the company's owner on a person's say-so,
+ * and the event trail records that it was admin, not the domain, that decided.
+ */
+export async function approvePendingOwner(
+  companyId: string,
+  _state: AdminFormState,
+  formData: FormData,
+): Promise<AdminFormState> {
+  await requireAdmin();
+
+  const company = await getCompanyById(companyId);
+  if (!company) return { error: "Gone." };
+
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  if (!isValidEmail(email)) return { error: "That email address isn't valid." };
+
+  // Never hand a managed company to a second person from here: that is a
+  // conversation with the first one, not a form.
+  if (await companyHasMembers(company.id)) {
+    return { error: `${company.name} already has an owner.` };
+  }
+
+  const person = await upsertUser({ email, provider: "email" });
+  await approveOwnership({ userId: person.id, companyId: company.id, email });
+
+  revalidatePath("/admin");
+  revalidatePath(`/admin/${companyId}`);
+  revalidatePath(`/c/${company.slug}`);
+  return { message: `${email} now manages ${company.name}.` };
 }
 
 /** Re-send a claim invitation, skipping the cooldown. */
