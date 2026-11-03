@@ -13,7 +13,7 @@ import { getMembership, spendLoginToken, upsertUser, addMember } from "@/lib/aut
 import { getCompanyByDomain } from "@/lib/db/queries";
 import { submitStack } from "@/lib/network";
 import { requestAddLink } from "@/actions/company";
-import { MAIL_UNAVAILABLE_MESSAGE } from "@/lib/email";
+import { LINK_ON_SCREEN_MESSAGE } from "@/lib/email";
 
 /**
  * A company can only add itself. These tests hold the line that let somebody
@@ -185,13 +185,14 @@ describe("asking for the link", () => {
   it("creates nothing, and holds the draft on the token", async () => {
     const state = await requestAddLink({}, confirmForm("sam@acme.dev"));
     expect(state.error).toBeUndefined();
-    expect(state.sent).toContain("Link sent to sam@acme.dev.");
+    expect(state.sent).toBe(LINK_ON_SCREEN_MESSAGE);
 
     expect(await countRows("companies")).toBe(0);
     expect(await countRows("login_tokens")).toBe(1);
 
-    // In development the link is on screen; spend it the way the route does.
-    const token = /token=([\w-]+)/.exec(state.sent ?? "")?.[1] ?? "";
+    // Without a mail provider the link is on screen; spend it the way the
+    // route does.
+    const token = /token=([\w-]+)/.exec(state.link ?? "")?.[1] ?? "";
     const spent = await spendLoginToken(token);
     expect(spent?.intentCompanyId).toBeNull();
     expect(parseAddDraft(spent?.claimDraft)).toMatchObject({
@@ -221,11 +222,13 @@ describe("asking for the link", () => {
     });
   });
 
-  it("refuses on a production deployment that cannot mail", async () => {
+  it("shows the link on a production deployment that cannot mail (launch-period rule)", async () => {
     env.NODE_ENV = "production";
     const state = await requestAddLink({}, confirmForm("sam@acme.dev"));
-    expect(state.error).toBe(MAIL_UNAVAILABLE_MESSAGE);
-    expect(await countRows("login_tokens")).toBe(0);
+    expect(state.error).toBeUndefined();
+    expect(state.sent).toBe(LINK_ON_SCREEN_MESSAGE);
+    expect(state.link).toContain("/auth/link?token=");
+    expect(await countRows("login_tokens")).toBe(1);
   });
 
   it("does not re-add a company that someone already manages", async () => {

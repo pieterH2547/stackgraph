@@ -19,6 +19,21 @@ export function ClaimForm({
     {},
   );
 
+  if (state.sentTo && state.devLink) {
+    return (
+      <div className="mt-8 max-w-xl">
+        <p className="text-lg">
+          Email isn&apos;t switched on here yet, so here is your link instead.
+          Open it and {companyName} is yours.
+        </p>
+        <a href={state.devLink} className="btn btn-primary mt-5">
+          Open my link
+        </a>
+        <p className="mono mt-3 break-all text-ink-3">{state.devLink}</p>
+      </div>
+    );
+  }
+
   if (state.sentTo) {
     return (
       <div className="mt-8 max-w-xl">
@@ -26,19 +41,6 @@ export function ClaimForm({
           Sent to <span className="font-medium">{state.sentTo}</span>. Click the
           link and {companyName} is yours.
         </p>
-        {state.devLink && (
-          <div className="card mt-5 p-4">
-            <p className="mono text-ink-3">
-              No mail provider configured — link shown for local testing
-            </p>
-            <a
-              href={state.devLink}
-              className="link-sharp mt-2 block break-all text-sm"
-            >
-              {state.devLink}
-            </a>
-          </div>
-        )}
       </div>
     );
   }

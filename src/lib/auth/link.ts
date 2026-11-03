@@ -3,6 +3,7 @@ import {
   MAIL_FAILED_MESSAGE,
   MAIL_UNAVAILABLE_MESSAGE,
   mailUnavailable,
+  noteLinkOnScreen,
   sendEmail,
   showsDevLinks,
 } from "../email";
@@ -17,7 +18,7 @@ import { createLoginToken } from "./store";
  * The order matters. A deployment that can neither mail the link nor show it
  * refuses before a token exists; a provider that refuses the send is reported
  * as a failure rather than as "sent"; and the link comes back for the screen
- * only where `showsDevLinks` says so, which is never in production.
+ * only where `showsDevLinks` says so.
  */
 export async function mailLoginLink(input: {
   email: string;
@@ -65,5 +66,7 @@ export async function mailLoginLink(input: {
     props: { kind: input.claimDraft ? "with-draft" : "plain" },
   });
 
-  return { ok: true, devLink: showsDevLinks() ? link : null };
+  const onScreen = showsDevLinks();
+  if (onScreen) noteLinkOnScreen("sign-in", input.email);
+  return { ok: true, devLink: onScreen ? link : null };
 }

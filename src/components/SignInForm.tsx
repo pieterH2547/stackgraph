@@ -176,9 +176,14 @@ export function SignInForm({
         </p>
       )}
       {state.sent && (
-        <p className="mt-4 border-l-2 border-accent pl-3 text-sm">
-          {state.sent}
-        </p>
+        <div className="mt-4 border-l-2 border-accent pl-3 text-sm">
+          <p>{state.sent}</p>
+          {state.link && (
+            <a href={state.link} className="btn btn-primary mt-3">
+              Open my link
+            </a>
+          )}
+        </div>
       )}
     </div>
   );

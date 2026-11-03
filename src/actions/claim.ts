@@ -20,6 +20,7 @@ import {
   MAIL_FAILED_MESSAGE,
   MAIL_UNAVAILABLE_MESSAGE,
   mailUnavailable,
+  noteLinkOnScreen,
   sendEmail,
   showsDevLinks,
 } from "@/lib/email";
@@ -103,9 +104,11 @@ export async function startClaim(
     return { error: MAIL_FAILED_MESSAGE };
   }
 
+  const onScreen = showsDevLinks();
+  if (onScreen) noteLinkOnScreen("claim", email);
   return {
     sentTo: email,
-    devLink: showsDevLinks() ? link : undefined,
+    devLink: onScreen ? link : undefined,
   };
 }
 
