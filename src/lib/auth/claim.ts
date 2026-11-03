@@ -1,9 +1,12 @@
 import { getCompanyById, updateCompany } from "../db/queries";
 import { emailDomain, PUBLIC_EMAIL_DOMAINS } from "../claims";
+import { notifyAdmin } from "../email";
 import { track } from "../events";
 import { nowIso } from "../ids";
 import { settleClaim } from "../network";
+import { absoluteUrl } from "../url";
 import { addMember, companyHasMembers, type User } from "./store";
+import type { Company } from "../types";
 
 /**
  * Identity is proved; the claim is not yet earned.
@@ -129,6 +132,7 @@ export async function settleOwnership(input: {
       companyId: company.id,
       props: { decision: "PENDING", reason, email: input.user.email },
     });
+    await notifyAdmin(pendingClaimMail(company, input.user.email, reason));
     return { status: "PENDING", reason };
   }
 
@@ -142,13 +146,46 @@ export async function settleOwnership(input: {
   return { status: "APPROVED", reason: "DOMAIN_MATCH" };
 }
 
+/** Where the person who runs the site approves this address, in one click. */
+export function approveUrl(companyId: string, email: string): string {
+  return absoluteUrl(`/admin/${companyId}?approve=${encodeURIComponent(email)}`);
+}
+
+/**
+ * The one mail the site sends to its own operator: a person proved they can
+ * read a mailbox, the mailbox does not prove the company, and somebody has to
+ * decide. Plain text, the decision first, and the link that takes it.
+ */
+export function pendingClaimMail(
+  company: Company,
+  email: string,
+  reason: "FREE_EMAIL" | "DOMAIN_MISMATCH",
+): { subject: string; text: string; replyTo: string } {
+  return {
+    subject: `Claim to decide: ${company.name} (${email})`,
+    text: [
+      `${email} wants to manage ${company.name} (${company.domain}).`,
+      "",
+      explainOutcome({ status: "PENDING", reason }),
+      "",
+      `Approve or ignore: ${approveUrl(company.id, email)}`,
+      "",
+      "Nothing has changed on the profile. Until you approve, this person",
+      "manages nothing. Reply to this mail to reach them.",
+    ].join("\n"),
+    replyTo: email,
+  };
+}
+
 /** Admin approving a claim a human had to look at. */
 export async function approveOwnership(input: {
   userId: string;
   companyId: string;
+  /** Recorded as the company's contact route if it has none yet. */
+  email?: string | null;
 }): Promise<void> {
-  await addMember({ ...input, role: "OWNER" });
-  await recordProvedIdentity(input.companyId, null);
+  await addMember({ userId: input.userId, companyId: input.companyId, role: "OWNER" });
+  await recordProvedIdentity(input.companyId, input.email ?? null);
   await track("claim_verified", {
     companyId: input.companyId,
     props: { decision: "APPROVED", reason: "ADMIN_REVIEW" },

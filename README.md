@@ -166,6 +166,10 @@ npm test                 # 241 tests, no network, no mail provider
 | `DATABASE_AUTH_TOKEN` | Turso token, if the URL needs one. `TURSO_AUTH_TOKEN` is accepted as well. |
 | `NEXT_PUBLIC_SITE_URL` | Used for share links, claim links and OG images. Falls back to the Vercel URL. |
 | `RESEND_API_KEY` | With no key, every notification is written to the `notifications` table and printed to the log instead of being delivered. In development (`next dev`) sign-in and claim links are then shown on screen so the loop stays walkable locally. Never on a production or Vercel deployment: there a missing key makes "Email me a link" refuse with a clear message, because a link on screen signs in whoever typed the address and a domain-matching address is approved as owner on the spot. A provider error (an unverified sender domain, say) is reported as a failure too, not as "Link sent". |
+| `EMAIL_FROM` | The sending address. Its domain must be verified in Resend. |
+| `EMAIL_REPLY_TO` | Where a reply to any mail we send lands: a person's inbox, so the sending domain never needs a mailbox. Unset: replies go to `EMAIL_FROM`. |
+| `CONTACT_EMAIL` | The one public address on the site, on `/advertise`. Defaults to `hello@` on the brand domain. |
+| `ADMIN_NOTIFY_EMAIL` | Mailed when a claim needs a human: a free mailbox, or an address on another domain. The mail links to the approve form in `/admin`. Unset: nobody is mailed and the decision waits there. |
 | `ADMIN_TOKEN` | Unlocks `/admin`. Unset means admin is unreachable. |
 | `SPONSOR_SALT` | Key material for the daily-rotating hash that tells a repeat sponsor impression from a new one. Optional: without it each server process picks its own, which is just as private but means two serverless instances can each count the same browser once. |
 | `DISABLE_SITE_DETECTION=1` | Never read vendor websites (used by the test suite). |
@@ -481,6 +485,32 @@ columns added since the first release are separate `ALTER TABLE`s where
 Without a database the app falls back to `/tmp`, which is per serverless
 instance: two requests can disagree and nothing survives. Fine for a look,
 useless for a test.
+
+**Mail.** Three mails leave the site, and every one of them is the product:
+the sign-in link (the only proof of identity), the recognition mail to a
+vendor somebody just credited (the flywheel), and the reminder to whoever
+runs the site when a claim needs a human. None of them can be shown on
+screen instead, so production needs mail that actually arrives. The
+checklist, in order:
+
+1. In Resend, add the brand domain as a sending domain and put its two DNS
+   records (SPF and DKIM) at the DNS provider. Wait for *verified*. A mail
+   from any other domain about Who Uses What reads as spam to a vendor who
+   has never heard of us, which is exactly the vendor the recognition mail
+   is for.
+2. In Vercel, set `RESEND_API_KEY`, `EMAIL_FROM` on that domain,
+   `EMAIL_REPLY_TO` and `ADMIN_NOTIFY_EMAIL` on a real inbox, and
+   `CONTACT_EMAIL` on the same inbox unless `hello@` exists. Nothing here
+   needs a mailbox on the brand domain: replies and decisions land where a
+   person already reads.
+3. Optionally `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, with
+   `<site>/auth/google/callback` registered at Google. Most independent
+   software companies run on Google Workspace, so one click proves the
+   domain without a trip to the inbox, and that is the least friction a
+   claim can have. The email link stays as the fallback.
+4. Open `/signin` on the deployed site and ask for a link to your own
+   address. "Email isn't set up" means step 2 is missing; "couldn't be sent"
+   means step 1 is not verified; a mail in the inbox means done.
 
 **3. The domain.** Apex gets an `A` record and `www` gets a `CNAME`, and both
 values must be copied from that project's own **Settings → Domains** page —

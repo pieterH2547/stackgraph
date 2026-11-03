@@ -3,11 +3,17 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ActionButton } from "@/components/ActionButton";
 import {
+  ApproveOwnerForm,
   CompanyEditForm,
   RemoveCompanyForm,
 } from "@/components/admin/AdminForms";
 import { CompanyInline } from "@/components/CompanyCard";
-import { removeCompany, resendInvite, saveCompany } from "@/actions/admin";
+import {
+  approvePendingOwner,
+  removeCompany,
+  resendInvite,
+  saveCompany,
+} from "@/actions/admin";
 import { listClaimsForCompany } from "@/lib/claims";
 import {
   getCompanyById,
@@ -28,10 +34,14 @@ export const metadata: Metadata = {
 
 export default async function AdminCompanyPage({
   params,
+  searchParams,
 }: PageProps<"/admin/[id]">) {
   if (!(await isAdmin())) redirect("/admin");
 
   const { id } = await params;
+  // Set by the link in the pending-claim mail, so the form opens prefilled.
+  const query = await searchParams;
+  const approve = typeof query.approve === "string" ? query.approve : "";
   const company = await getCompanyById(id);
   if (!company) notFound();
 
@@ -148,6 +158,13 @@ export default async function AdminCompanyPage({
               {timeAgo(claim.createdAt)}
             </p>
           ))}
+        </div>
+        <div className="mt-6">
+          <ApproveOwnerForm
+            action={approvePendingOwner.bind(null, company.id)}
+            company={company}
+            email={approve}
+          />
         </div>
       </section>
 

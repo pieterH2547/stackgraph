@@ -3,11 +3,18 @@ import { countRows, resetDatabase } from "./helpers";
 import {
   MAIL_FAILED_MESSAGE,
   MAIL_UNAVAILABLE_MESSAGE,
+  adminAddress,
+  contactAddress,
   mailUnavailable,
+  replyToAddress,
+  sendEmail,
   showsDevLinks,
 } from "@/lib/email";
 import { sendSignInLink } from "@/actions/auth";
 import { startClaim } from "@/actions/claim";
+import { approveOwnership, settleOwnership } from "@/lib/auth/claim";
+import { getMembership, upsertUser } from "@/lib/auth/store";
+import { getCompanyById } from "@/lib/db/queries";
 import { addCompany } from "@/lib/network";
 
 /**
@@ -19,7 +26,14 @@ import { addCompany } from "@/lib/network";
  */
 
 const saved: Record<string, string | undefined> = {};
-const KEYS = ["NODE_ENV", "VERCEL", "RESEND_API_KEY"] as const;
+const KEYS = [
+  "NODE_ENV",
+  "VERCEL",
+  "RESEND_API_KEY",
+  "EMAIL_REPLY_TO",
+  "ADMIN_NOTIFY_EMAIL",
+  "CONTACT_EMAIL",
+] as const;
 // Next's types mark NODE_ENV read-only; at runtime it is an ordinary variable,
 // and that is what these tests change and restore.
 const env = process.env as Record<string, string | undefined>;
@@ -201,5 +215,135 @@ describe("the claim link", () => {
     const state = await startClaim(acme.slug, {}, claimForm("sam@acme.dev"));
     expect(state.sentTo).toBeUndefined();
     expect(state.error).toBe(MAIL_FAILED_MESSAGE);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/**
+ * Captures what would have gone to Resend. Each entry is one request body.
+ */
+function captureResend(): Record<string, unknown>[] {
+  const sent: Record<string, unknown>[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_url: string, init?: RequestInit) => {
+      sent.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return new Response("{}", { status: 200 });
+    }),
+  );
+  return sent;
+}
+
+describe("where replies and the public address go", () => {
+  it("reads the addresses from the environment, and ignores junk", () => {
+    expect(replyToAddress({})).toBeNull();
+    expect(replyToAddress({ EMAIL_REPLY_TO: "  " })).toBeNull();
+    expect(replyToAddress({ EMAIL_REPLY_TO: "not an address" })).toBeNull();
+    expect(replyToAddress({ EMAIL_REPLY_TO: " pieter@example.com " })).toBe(
+      "pieter@example.com",
+    );
+    expect(adminAddress({})).toBeNull();
+    expect(adminAddress({ ADMIN_NOTIFY_EMAIL: "pieter@example.com" })).toBe(
+      "pieter@example.com",
+    );
+    expect(contactAddress({})).toBe("hello@whouseswhat.tech");
+    expect(contactAddress({ CONTACT_EMAIL: "pieter@example.com" })).toBe(
+      "pieter@example.com",
+    );
+  });
+
+  it("puts Reply-To on every mail once it is configured, and never otherwise", async () => {
+    setEnv({ RESEND_API_KEY: "re_test" });
+    const sent = captureResend();
+
+    await sendEmail({ to: "sam@acme.dev", subject: "Hi", text: "Hello" });
+    expect(sent[0]).not.toHaveProperty("reply_to");
+
+    env.EMAIL_REPLY_TO = "pieter@example.com";
+    await sendEmail({ to: "sam@acme.dev", subject: "Hi", text: "Hello" });
+    expect(sent[1]).toMatchObject({ reply_to: "pieter@example.com" });
+
+    // A message can name its own reply address.
+    await sendEmail({
+      to: "sam@acme.dev",
+      subject: "Hi",
+      text: "Hello",
+      replyTo: "sam@gmail.com",
+    });
+    expect(sent[2]).toMatchObject({ reply_to: "sam@gmail.com" });
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+describe("the mail to whoever runs the site", () => {
+  async function unclaimedAcme() {
+    const { company } = await addCompany({
+      url: "acme.dev",
+      name: "Acme",
+      source: "SEED",
+      status: "UNCLAIMED",
+    });
+    return company;
+  }
+
+  it("goes out when a claim needs a human, with the approve link and the person as Reply-To", async () => {
+    setEnv({ RESEND_API_KEY: "re_test", ADMIN_NOTIFY_EMAIL: "pieter@example.com" });
+    const sent = captureResend();
+    const acme = await unclaimedAcme();
+    const sam = await upsertUser({ email: "sam@gmail.com", provider: "email" });
+
+    const outcome = await settleOwnership({ user: sam, companyId: acme.id });
+    expect(outcome).toEqual({ status: "PENDING", reason: "FREE_EMAIL" });
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({
+      to: ["pieter@example.com"],
+      reply_to: "sam@gmail.com",
+      subject: "Claim to decide: Acme (sam@gmail.com)",
+    });
+    const text = String(sent[0].text);
+    expect(text).toContain(
+      `http://localhost:3000/admin/${acme.id}?approve=sam%40gmail.com`,
+    );
+    expect(text).toContain("A free mailbox cannot prove who owns a domain");
+    // The mail changed nothing: still nobody manages Acme.
+    expect(await getMembership(sam.id, acme.id)).toBeNull();
+  });
+
+  it("is not sent for a claim the domain already decided", async () => {
+    setEnv({ RESEND_API_KEY: "re_test", ADMIN_NOTIFY_EMAIL: "pieter@example.com" });
+    const sent = captureResend();
+    const acme = await unclaimedAcme();
+    const sam = await upsertUser({ email: "sam@acme.dev", provider: "email" });
+
+    const outcome = await settleOwnership({ user: sam, companyId: acme.id });
+    expect(outcome.status).toBe("APPROVED");
+    expect(sent).toHaveLength(0);
+  });
+
+  it("is simply skipped when no address is configured", async () => {
+    setEnv({ RESEND_API_KEY: "re_test" });
+    const sent = captureResend();
+    const acme = await unclaimedAcme();
+    const sam = await upsertUser({ email: "sam@gmail.com", provider: "email" });
+
+    const outcome = await settleOwnership({ user: sam, companyId: acme.id });
+    expect(outcome.status).toBe("PENDING");
+    expect(sent).toHaveLength(0);
+  });
+
+  it("approving from admin makes the person the owner and the contact route", async () => {
+    const acme = await unclaimedAcme();
+    const sam = await upsertUser({ email: "sam@gmail.com", provider: "email" });
+    await settleOwnership({ user: sam, companyId: acme.id });
+
+    await approveOwnership({ userId: sam.id, companyId: acme.id, email: sam.email });
+
+    expect((await getMembership(sam.id, acme.id))?.role).toBe("OWNER");
+    const after = (await getCompanyById(acme.id))!;
+    expect(after.contactEmail).toBe("sam@gmail.com");
+    expect(after.claimVerifiedAt).not.toBeNull();
+    // Identity alone does not claim: that still takes two tools.
+    expect(after.status).toBe("UNCLAIMED");
   });
 });

@@ -111,6 +111,54 @@ export function SeedCompanyForm({ action }: { action: AdminAction }) {
 }
 
 /**
+ * The decision a pending claim waits for. The address arrives prefilled from
+ * the link in the notification mail, so the normal case is one click.
+ */
+export function ApproveOwnerForm({
+  action,
+  company,
+  email,
+}: {
+  action: AdminAction;
+  company: Company;
+  email: string;
+}) {
+  const [state, formAction] = useActionState<AdminFormState, FormData>(
+    action,
+    {},
+  );
+
+  return (
+    <form action={formAction} className="card p-5">
+      <p className="label">Approve an owner</p>
+      <p className="max-w-xl text-sm leading-relaxed text-ink-2">
+        For a claim from an address that could not prove {company.domain}: a
+        free mailbox, or another domain. Approving makes that person the
+        manager of {company.name}; the profile turns claimed once it also
+        names two independent tools.
+      </p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+        <div>
+          <label className="label" htmlFor="approve-email">
+            Their email
+          </label>
+          <input
+            id="approve-email"
+            name="email"
+            type="email"
+            className="field"
+            autoComplete="off"
+            defaultValue={email}
+          />
+        </div>
+        <Save label="Approve" />
+      </div>
+      <Notice state={state} />
+    </form>
+  );
+}
+
+/**
  * The one admin action with no undo, so the domain is typed back rather than
  * clicked. What leaves with the company is spelled out above the field.
  */
